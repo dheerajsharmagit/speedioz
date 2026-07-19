@@ -225,7 +225,10 @@ function RidePage() {
             travelMode: selected === "auto" ? "DRIVE" : "TWO_WHEELER",
           },
         });
-        if (!cancelled) setEncodedPolyline(res.encodedPolyline);
+        if (!cancelled) {
+          setEncodedPolyline(res.encodedPolyline);
+          setRouteSteps(res.steps ?? []);
+        }
       } catch (e) {
         console.warn("route fetch failed", e);
       }
