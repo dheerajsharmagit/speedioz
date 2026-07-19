@@ -76,8 +76,13 @@ function RidePage() {
   const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
+  const userIdRef = useRef<string>("");
 
-  useEffect(() => { deviceIdRef.current = getDeviceId(); }, []);
+  useEffect(() => {
+    deviceIdRef.current = getDeviceId();
+    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+  }, []);
+
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
   const fare = vehicle.price + (useSmartRoute ? 0 : 8);
