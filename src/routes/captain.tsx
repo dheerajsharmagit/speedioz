@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceId } from "@/lib/device-id";
+import { ensureAnonSession } from "@/lib/anon-session";
 import type { Ride } from "@/lib/rides";
 
 export const Route = createFileRoute("/captain")({
@@ -35,8 +36,13 @@ function CaptainPage() {
   const [active, setActive] = useState<Ride | null>(null);
   const [error, setError] = useState<string | null>(null);
   const deviceIdRef = useRef<string>("");
+  const userIdRef = useRef<string>("");
 
-  useEffect(() => { deviceIdRef.current = getDeviceId(); }, []);
+  useEffect(() => {
+    deviceIdRef.current = getDeviceId();
+    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+  }, []);
+
 
   // Load current state
   useEffect(() => {
@@ -95,10 +101,13 @@ function CaptainPage() {
   async function accept(ride: Ride) {
     setError(null);
     const did = deviceIdRef.current || getDeviceId();
+    const uid = userIdRef.current || (await ensureAnonSession());
+    userIdRef.current = uid;
     const { data, error } = await supabase
       .from("rides")
       .update({
         status: "accepted",
+        captain_user_id: uid,
         captain_device_id: did,
         captain_name: CAPTAIN.name,
         captain_plate: CAPTAIN.plate,

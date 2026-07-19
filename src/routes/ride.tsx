@@ -5,6 +5,7 @@ import { RideMap } from "@/components/rc/RideMap";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
+import { ensureAnonSession } from "@/lib/anon-session";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 
@@ -75,8 +76,13 @@ function RidePage() {
   const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
+  const userIdRef = useRef<string>("");
 
-  useEffect(() => { deviceIdRef.current = getDeviceId(); }, []);
+  useEffect(() => {
+    deviceIdRef.current = getDeviceId();
+    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+  }, []);
+
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
   const fare = vehicle.price + (useSmartRoute ? 0 : 8);
@@ -133,9 +139,12 @@ function RidePage() {
     if (!dest) return;
     setCreating(true);
     try {
+      const uid = userIdRef.current || (await ensureAnonSession());
+      userIdRef.current = uid;
       const { data, error } = await supabase
         .from("rides")
         .insert({
+          rider_user_id: uid,
           rider_device_id: deviceIdRef.current,
           pickup_label: PICKUP.label,
           pickup_lat: PICKUP.lat,
