@@ -226,6 +226,8 @@ function RidePage() {
     }
     setRide(null);
     setEncodedPolyline("");
+    setApproachPolyline("");
+    approachFetchedRef.current = null;
     setCaptainPos(null);
     setStep("confirm");
   }
