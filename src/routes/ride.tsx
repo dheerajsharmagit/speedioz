@@ -374,7 +374,15 @@ function RidePage() {
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />
 
           {step === "destination" && (
-            <DestinationStep dest={dest} setDest={setDest} onNext={() => dest && setStep("vehicle")} />
+            <DestinationStep
+              pickup={pickup}
+              locating={locating}
+              dest={dest}
+              setDest={setDest}
+              query={destQuery}
+              setQuery={setDestQuery}
+              onNext={() => dest && setStep("vehicle")}
+            />
           )}
 
           {step === "vehicle" && (
