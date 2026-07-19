@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
+import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
@@ -26,17 +27,10 @@ const vehicles: Vehicle[] = [
   { id: "ev", name: "EV Bike", price: 52, eta: "4 min", note: "Green" },
 ];
 
-// Bangalore-area presets
-const PICKUP = { label: "Studio 14, Arts District (Indiranagar)", lat: 12.9718, lng: 77.6412 };
-const DESTS = [
-  { name: "Home", addr: "Indiranagar, 100 Ft Rd", lat: 12.9784, lng: 77.6408 },
-  { name: "Office", addr: "Manyata Tech Park", lat: 13.0450, lng: 77.6210 },
-  { name: "Airport", addr: "Kempegowda Intl Airport", lat: 13.1986, lng: 77.7066 },
-  { name: "Phoenix Marketplace", addr: "Whitefield Main Rd", lat: 12.9955, lng: 77.6960 },
-  { name: "MG Road Metro", addr: "Trinity Circle", lat: 12.9755, lng: 77.6060 },
-  { name: "Cubbon Park", addr: "Kasturba Rd", lat: 12.9767, lng: 77.5946 },
-  { name: "Koramangala 5th Block", addr: "80 Ft Rd", lat: 12.9352, lng: 77.6245 },
-];
+type Pickup = { label: string; lat: number; lng: number };
+// Fallback pickup used until browser geolocation resolves (Bangalore center).
+const DEFAULT_PICKUP: Pickup = { label: "Locating you…", lat: 12.9718, lng: 77.6412 };
+
 
 type UiStep =
   | "destination"
