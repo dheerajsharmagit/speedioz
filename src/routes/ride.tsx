@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
+import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
@@ -26,17 +27,10 @@ const vehicles: Vehicle[] = [
   { id: "ev", name: "EV Bike", price: 52, eta: "4 min", note: "Green" },
 ];
 
-// Bangalore-area presets
-const PICKUP = { label: "Studio 14, Arts District (Indiranagar)", lat: 12.9718, lng: 77.6412 };
-const DESTS = [
-  { name: "Home", addr: "Indiranagar, 100 Ft Rd", lat: 12.9784, lng: 77.6408 },
-  { name: "Office", addr: "Manyata Tech Park", lat: 13.0450, lng: 77.6210 },
-  { name: "Airport", addr: "Kempegowda Intl Airport", lat: 13.1986, lng: 77.7066 },
-  { name: "Phoenix Marketplace", addr: "Whitefield Main Rd", lat: 12.9955, lng: 77.6960 },
-  { name: "MG Road Metro", addr: "Trinity Circle", lat: 12.9755, lng: 77.6060 },
-  { name: "Cubbon Park", addr: "Kasturba Rd", lat: 12.9767, lng: 77.5946 },
-  { name: "Koramangala 5th Block", addr: "80 Ft Rd", lat: 12.9352, lng: 77.6245 },
-];
+type Pickup = { label: string; lat: number; lng: number };
+// Fallback pickup used until browser geolocation resolves (Bangalore center).
+const DEFAULT_PICKUP: Pickup = { label: "Locating you…", lat: 12.9718, lng: 77.6412 };
+
 
 type UiStep =
   | "destination"
@@ -88,7 +82,10 @@ function computeEtaMinutes(
 function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
-  const [dest, setDest] = useState<typeof DESTS[number] | null>(null);
+  const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
+  const [locating, setLocating] = useState(true);
+  const [destQuery, setDestQuery] = useState("");
+  const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("upi");
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
@@ -105,7 +102,29 @@ function RidePage() {
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPickup({
+            label: "Current location",
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+          setLocating(false);
+        },
+        (err) => {
+          console.warn("geolocation failed", err);
+          setPickup((prev) => ({ ...prev, label: "Location unavailable — using city center" }));
+          setLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      );
+    } else {
+      setLocating(false);
+    }
   }, []);
+
 
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
@@ -169,7 +188,7 @@ function RidePage() {
       try {
         const res = await computeRoute({
           data: {
-            origin: { lat: PICKUP.lat, lng: PICKUP.lng },
+            origin: { lat: pickup.lat, lng: pickup.lng },
             destination: { lat: dest.lat, lng: dest.lng },
             travelMode: selected === "auto" ? "DRIVE" : "TWO_WHEELER",
           },
@@ -193,9 +212,9 @@ function RidePage() {
         .insert({
           rider_user_id: uid,
           rider_device_id: deviceIdRef.current,
-          pickup_label: PICKUP.label,
-          pickup_lat: PICKUP.lat,
-          pickup_lng: PICKUP.lng,
+          pickup_label: pickup.label,
+          pickup_lat: pickup.lat,
+          pickup_lng: pickup.lng,
           drop_label: dest.addr,
           drop_lat: dest.lat,
           drop_lng: dest.lng,
@@ -246,6 +265,7 @@ function RidePage() {
     // reset
     setRide(null);
     setDest(null);
+    setDestQuery("");
     setEncodedPolyline("");
     setApproachPolyline("");
     approachFetchedRef.current = null;
@@ -256,8 +276,8 @@ function RidePage() {
     setStep("destination");
   }
 
-  const mapPickup = { lat: PICKUP.lat, lng: PICKUP.lng };
-  const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: PICKUP.lat + 0.03, lng: PICKUP.lng + 0.03 };
+  const mapPickup = { lat: pickup.lat, lng: pickup.lng };
+  const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 };
 
   // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
   const activePolyline =
@@ -326,7 +346,7 @@ function RidePage() {
           <div className="pointer-events-none absolute left-6 right-6 top-6">
             <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-              <p className="mt-1 text-xs font-semibold">{PICKUP.label}</p>
+              <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
               {dest && (
                 <>
                   <div className="my-2 h-px bg-border" />
@@ -355,7 +375,15 @@ function RidePage() {
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />
 
           {step === "destination" && (
-            <DestinationStep dest={dest} setDest={setDest} onNext={() => dest && setStep("vehicle")} />
+            <DestinationStep
+              pickup={pickup}
+              locating={locating}
+              dest={dest}
+              setDest={setDest}
+              query={destQuery}
+              setQuery={setDestQuery}
+              onNext={() => dest && setStep("vehicle")}
+            />
           )}
 
           {step === "vehicle" && (
@@ -447,49 +475,53 @@ function StepIndicator({ step }: { step: UiStep }) {
 
 /* ---------- Destination ---------- */
 function DestinationStep({
+  pickup,
+  locating,
   dest,
   setDest,
+  query,
+  setQuery,
   onNext,
 }: {
-  dest: typeof DESTS[number] | null;
-  setDest: (v: typeof DESTS[number]) => void;
+  pickup: Pickup;
+  locating: boolean;
+  dest: PlaceResult | null;
+  setDest: (v: PlaceResult | null) => void;
+  query: string;
+  setQuery: (v: string) => void;
   onNext: () => void;
 }) {
   return (
     <>
-      <div className="mb-4 px-6">
-        <div className="relative">
-          <div className="absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-accent" />
-          <input
-            value={dest?.addr ?? ""}
-            readOnly
-            placeholder="Pick a destination below"
-            className="h-16 w-full rounded-2xl bg-muted pl-10 pr-4 text-lg font-semibold outline-none placeholder:text-muted-foreground"
-          />
+      <div className="mb-3 px-6">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Pickup
+        </p>
+        <div className="mt-1 flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
+          <span className="h-2 w-2 rounded-full bg-primary" />
+          <span className="text-sm font-semibold">
+            {locating ? "Locating you…" : pickup.label}
+          </span>
         </div>
       </div>
 
       <div className="mb-6 px-6">
-        <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Popular destinations</p>
-        <div className="space-y-2">
-          {DESTS.map((d) => {
-            const active = dest?.addr === d.addr;
-            return (
-              <button
-                key={d.addr}
-                onClick={() => setDest(d)}
-                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
-                  active ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background hover:border-foreground/30"
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-bold">{d.name}</p>
-                  <p className={`text-xs ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}>{d.addr}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Drop
+        </p>
+        <PlaceSearch
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            if (dest && v !== dest.addr) setDest(null);
+          }}
+          onSelect={(p) => {
+            setDest(p);
+            setQuery(p.addr);
+          }}
+          placeholder="Search a destination"
+          bias={{ lat: pickup.lat, lng: pickup.lng }}
+        />
       </div>
 
       <div className="px-6 pb-12">
@@ -504,6 +536,7 @@ function DestinationStep({
     </>
   );
 }
+
 
 /* ---------- Vehicle ---------- */
 function VehicleStep({
