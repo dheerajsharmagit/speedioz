@@ -71,12 +71,14 @@ function RidePage() {
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
+  const [approachPolyline, setApproachPolyline] = useState<string>("");
   const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
   const [rating, setRating] = useState(0);
   const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
+  const approachFetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
