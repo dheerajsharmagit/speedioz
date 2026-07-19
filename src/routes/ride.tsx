@@ -28,8 +28,50 @@ const vehicles: Vehicle[] = [
 ];
 
 type Pickup = { label: string; lat: number; lng: number };
+type RouteStep = {
+  instruction: string;
+  maneuver: string;
+  distanceMeters: number;
+  endLat: number;
+  endLng: number;
+  encodedPolyline: string;
+};
 // Fallback pickup used until browser geolocation resolves (Bangalore center).
 const DEFAULT_PICKUP: Pickup = { label: "Locating you…", lat: 12.9718, lng: 77.6412 };
+
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+function maneuverGlyph(m: string): string {
+  const k = (m || "").toUpperCase();
+  if (k.includes("LEFT")) return "↰";
+  if (k.includes("RIGHT")) return "↱";
+  if (k.includes("UTURN")) return "⤴";
+  if (k.includes("MERGE")) return "⇱";
+  if (k.includes("ROUNDABOUT")) return "⟳";
+  if (k.includes("DESTINATION")) return "◉";
+  return "↑";
+}
+
+function formatMeters(m: number): string {
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
+}
+
+// Return index of the step whose endLocation is the next waypoint ahead of `pos`.
+function activeStepIndex(steps: RouteStep[], pos: { lat: number; lng: number }): number {
+  if (steps.length === 0) return -1;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < steps.length; i++) {
+    const d = haversineKm(pos, { lat: steps[i].endLat, lng: steps[i].endLng });
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  // If we're already within 30m of this step's end, advance to the next.
+  if (bestD * 1000 < 30 && best < steps.length - 1) return best + 1;
+  return best;
+}
 
 
 type UiStep =
@@ -90,6 +132,7 @@ function RidePage() {
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
+  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
   const [approachPolyline, setApproachPolyline] = useState<string>("");
   const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
   const [rating, setRating] = useState(0);
@@ -193,7 +236,10 @@ function RidePage() {
             travelMode: selected === "auto" ? "DRIVE" : "TWO_WHEELER",
           },
         });
-        if (!cancelled) setEncodedPolyline(res.encodedPolyline);
+        if (!cancelled) {
+          setEncodedPolyline(res.encodedPolyline);
+          setRouteSteps(res.steps ?? []);
+        }
       } catch (e) {
         console.warn("route fetch failed", e);
       }
@@ -245,6 +291,7 @@ function RidePage() {
     }
     setRide(null);
     setEncodedPolyline("");
+    setRouteSteps([]);
     setApproachPolyline("");
     approachFetchedRef.current = null;
     setCaptainPos(null);
@@ -267,6 +314,7 @@ function RidePage() {
     setDest(null);
     setDestQuery("");
     setEncodedPolyline("");
+    setRouteSteps([]);
     setApproachPolyline("");
     approachFetchedRef.current = null;
     setCaptainPos(null);
@@ -297,6 +345,25 @@ function RidePage() {
       : step === "inprogress"
         ? "Drop in"
         : null;
+
+  // Turn-by-turn: pick active step based on captain position along the main route.
+  const showTurnByTurn = step === "inprogress" && routeSteps.length > 0 && captainPos !== null;
+  const activeStepIdx = showTurnByTurn ? activeStepIndex(routeSteps, captainPos!) : -1;
+  const currentStep = activeStepIdx >= 0 ? routeSteps[activeStepIdx] : null;
+  const nextStep = activeStepIdx >= 0 && activeStepIdx + 1 < routeSteps.length ? routeSteps[activeStepIdx + 1] : null;
+  const distanceToTurn = currentStep && captainPos
+    ? haversineKm(captainPos, { lat: currentStep.endLat, lng: currentStep.endLng }) * 1000
+    : 0;
+
+  // Overall trip progress (0..1) — how far captain has gone along main route.
+  const tripProgress = (() => {
+    if (step !== "inprogress" || !captainPos || routeSteps.length === 0) return 0;
+    const total = routeSteps.reduce((s, x) => s + x.distanceMeters, 0);
+    if (total === 0) return 0;
+    const passed = routeSteps.slice(0, activeStepIdx).reduce((s, x) => s + x.distanceMeters, 0);
+    return Math.min(1, Math.max(0, passed / total));
+  })();
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -336,17 +403,44 @@ function RidePage() {
 
 
           <div className="pointer-events-none absolute left-6 right-6 top-6">
-            <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-              <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
-              {dest && (
-                <>
-                  <div className="my-2 h-px bg-border" />
-                  <p className="font-mono text-[10px] uppercase text-muted-foreground">Drop</p>
-                  <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
-                </>
-              )}
-            </div>
+            {showTurnByTurn && currentStep ? (
+              <div className="rounded-2xl bg-secondary/95 p-4 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-lg font-black text-secondary">
+                    {maneuverGlyph(currentStep.maneuver)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[9px] uppercase tracking-widest opacity-60">
+                      In {formatMeters(distanceToTurn)}
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-bold">{stripHtml(currentStep.instruction) || "Continue"}</p>
+                  </div>
+                </div>
+                {nextStep && (
+                  <p className="mt-2 truncate font-mono text-[10px] uppercase tracking-wider opacity-60">
+                    Then · {stripHtml(nextStep.instruction)}
+                  </p>
+                )}
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-primary transition-[width] duration-500"
+                    style={{ width: `${Math.round(tripProgress * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
+                <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
+                <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
+                {dest && (
+                  <>
+                    <div className="my-2 h-px bg-border" />
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">Drop</p>
+                    <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {etaLabel && etaMinutes !== null && (
@@ -418,7 +512,7 @@ function RidePage() {
           {step === "inprogress" && ride && (
             <RideStatusStep
               title="On the way"
-              subtitle={`22 min via Smart Route${useSmartRoute ? " · saving 12 min" : ""}`}
+              subtitle={`${etaMinutes ?? "—"} min to drop · ${Math.round(tripProgress * 100)}% complete${useSmartRoute ? " · saving 12 min" : ""}`}
               ride={ride}
               onNext={simulateCompleted}
               ctaLabel="Simulate arrival"
