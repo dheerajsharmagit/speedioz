@@ -1,16 +1,43 @@
 // Loads the Google Maps JS API exactly once, browser-only.
 // Uses the referrer-restricted browser key from the Google Maps connector.
 
-let loaderPromise: Promise<typeof google> | null = null;
+export type LatLngLiteral = { lat: number; lng: number };
+export type GoogleLatLng = { lat: () => number; lng: () => number };
+export type GoogleMap = { fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void };
+export type GoogleMarker = {
+  setMap: (map: GoogleMap | null) => void;
+  setPosition: (position: LatLngLiteral) => void;
+};
+export type GooglePolyline = { setMap: (map: GoogleMap | null) => void };
+export type GoogleLatLngBounds = { extend: (point: LatLngLiteral | GoogleLatLng) => void };
+export type GooglePlacesLibrary = {
+  AutocompleteSessionToken: new () => unknown;
+  AutocompleteSuggestion: {
+    fetchAutocompleteSuggestions: (request: Record<string, unknown>) => Promise<{ suggestions?: unknown[] }>;
+  };
+};
+export type GoogleMapsApi = {
+  maps: {
+    Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
+    Marker: new (options: Record<string, unknown>) => GoogleMarker;
+    Polyline: new (options: Record<string, unknown>) => GooglePolyline;
+    LatLngBounds: new () => GoogleLatLngBounds;
+    SymbolPath: { CIRCLE: unknown };
+    geometry: { encoding: { decodePath: (encoded: string) => GoogleLatLng[] } };
+    importLibrary: (library: "places" | string) => Promise<unknown>;
+  };
+};
+
+let loaderPromise: Promise<GoogleMapsApi> | null = null;
 
 declare global {
   interface Window {
     __rcInitGoogleMaps?: () => void;
-    google?: typeof google;
+    google?: GoogleMapsApi;
   }
 }
 
-export function loadGoogleMaps(): Promise<typeof google> {
+export function loadGoogleMaps(): Promise<GoogleMapsApi> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Google Maps can only load in the browser"));
   }

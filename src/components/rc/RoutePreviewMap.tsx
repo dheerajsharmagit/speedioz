@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import {
+  type GoogleMap,
+  type GooglePolyline,
+  type GoogleLatLng,
+  loadGoogleMaps,
+} from "@/lib/google-maps-loader";
 import { computeRoute } from "@/lib/routes.functions";
 
 interface Props {
@@ -16,8 +21,8 @@ export function RoutePreviewMap({ from, to, className }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    let map: google.maps.Map | null = null;
-    let poly: google.maps.Polyline | null = null;
+    let map: GoogleMap | null = null;
+    let poly: GooglePolyline | null = null;
 
     (async () => {
       try {
@@ -73,7 +78,7 @@ export function RoutePreviewMap({ from, to, className }: Props) {
             map,
           });
           const bounds = new g.maps.LatLngBounds();
-          path.forEach((p: google.maps.LatLng) => bounds.extend(p));
+          path.forEach((p: GoogleLatLng) => bounds.extend(p));
           map.fitBounds(bounds, 20);
         } else if (map) {
           const bounds = new g.maps.LatLngBounds();
