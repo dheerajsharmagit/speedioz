@@ -36,8 +36,13 @@ function CaptainPage() {
   const [active, setActive] = useState<Ride | null>(null);
   const [error, setError] = useState<string | null>(null);
   const deviceIdRef = useRef<string>("");
+  const userIdRef = useRef<string>("");
 
-  useEffect(() => { deviceIdRef.current = getDeviceId(); }, []);
+  useEffect(() => {
+    deviceIdRef.current = getDeviceId();
+    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+  }, []);
+
 
   // Load current state
   useEffect(() => {
