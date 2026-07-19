@@ -5,6 +5,7 @@ import { RideMap } from "@/components/rc/RideMap";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
+import { ensureAnonSession } from "@/lib/anon-session";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 
