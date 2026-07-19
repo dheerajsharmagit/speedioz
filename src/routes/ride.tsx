@@ -43,6 +43,17 @@ function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
+function maneuverGlyph(m: string): string {
+  const k = (m || "").toUpperCase();
+  if (k.includes("LEFT")) return "↰";
+  if (k.includes("RIGHT")) return "↱";
+  if (k.includes("UTURN")) return "⤴";
+  if (k.includes("MERGE")) return "⇱";
+  if (k.includes("ROUNDABOUT")) return "⟳";
+  if (k.includes("DESTINATION")) return "◉";
+  return "↑";
+}
+
 function formatMeters(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`;
   return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
