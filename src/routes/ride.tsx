@@ -81,6 +81,9 @@ function computeEtaMinutes(
   const avgKmh = vehicle === "auto" ? 22 : 28; // rough urban avg
   const minutes = Math.round((km / avgKmh) * 60);
   return Math.max(1, minutes);
+}
+
+
 
 function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
