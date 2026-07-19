@@ -28,8 +28,39 @@ const vehicles: Vehicle[] = [
 ];
 
 type Pickup = { label: string; lat: number; lng: number };
+type RouteStep = {
+  instruction: string;
+  maneuver: string;
+  distanceMeters: number;
+  endLat: number;
+  endLng: number;
+  encodedPolyline: string;
+};
 // Fallback pickup used until browser geolocation resolves (Bangalore center).
 const DEFAULT_PICKUP: Pickup = { label: "Locating you…", lat: 12.9718, lng: 77.6412 };
+
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+function formatMeters(m: number): string {
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
+}
+
+// Return index of the step whose endLocation is the next waypoint ahead of `pos`.
+function activeStepIndex(steps: RouteStep[], pos: { lat: number; lng: number }): number {
+  if (steps.length === 0) return -1;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < steps.length; i++) {
+    const d = haversineKm(pos, { lat: steps[i].endLat, lng: steps[i].endLng });
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  // If we're already within 30m of this step's end, advance to the next.
+  if (bestD * 1000 < 30 && best < steps.length - 1) return best + 1;
+  return best;
+}
 
 
 type UiStep =
