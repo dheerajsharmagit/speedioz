@@ -466,49 +466,53 @@ function StepIndicator({ step }: { step: UiStep }) {
 
 /* ---------- Destination ---------- */
 function DestinationStep({
+  pickup,
+  locating,
   dest,
   setDest,
+  query,
+  setQuery,
   onNext,
 }: {
-  dest: typeof DESTS[number] | null;
-  setDest: (v: typeof DESTS[number]) => void;
+  pickup: Pickup;
+  locating: boolean;
+  dest: PlaceResult | null;
+  setDest: (v: PlaceResult | null) => void;
+  query: string;
+  setQuery: (v: string) => void;
   onNext: () => void;
 }) {
   return (
     <>
-      <div className="mb-4 px-6">
-        <div className="relative">
-          <div className="absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-accent" />
-          <input
-            value={dest?.addr ?? ""}
-            readOnly
-            placeholder="Pick a destination below"
-            className="h-16 w-full rounded-2xl bg-muted pl-10 pr-4 text-lg font-semibold outline-none placeholder:text-muted-foreground"
-          />
+      <div className="mb-3 px-6">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Pickup
+        </p>
+        <div className="mt-1 flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
+          <span className="h-2 w-2 rounded-full bg-primary" />
+          <span className="text-sm font-semibold">
+            {locating ? "Locating you…" : pickup.label}
+          </span>
         </div>
       </div>
 
       <div className="mb-6 px-6">
-        <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Popular destinations</p>
-        <div className="space-y-2">
-          {DESTS.map((d) => {
-            const active = dest?.addr === d.addr;
-            return (
-              <button
-                key={d.addr}
-                onClick={() => setDest(d)}
-                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
-                  active ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background hover:border-foreground/30"
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-bold">{d.name}</p>
-                  <p className={`text-xs ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}>{d.addr}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Drop
+        </p>
+        <PlaceSearch
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            if (dest && v !== dest.addr) setDest(null);
+          }}
+          onSelect={(p) => {
+            setDest(p);
+            setQuery(p.addr);
+          }}
+          placeholder="Search a destination"
+          bias={{ lat: pickup.lat, lng: pickup.lng }}
+        />
       </div>
 
       <div className="px-6 pb-12">
@@ -523,6 +527,7 @@ function DestinationStep({
     </>
   );
 }
+
 
 /* ---------- Vehicle ---------- */
 function VehicleStep({
