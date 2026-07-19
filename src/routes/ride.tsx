@@ -265,6 +265,7 @@ function RidePage() {
     // reset
     setRide(null);
     setDest(null);
+    setDestQuery("");
     setEncodedPolyline("");
     setApproachPolyline("");
     approachFetchedRef.current = null;
