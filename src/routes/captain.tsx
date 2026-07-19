@@ -101,10 +101,13 @@ function CaptainPage() {
   async function accept(ride: Ride) {
     setError(null);
     const did = deviceIdRef.current || getDeviceId();
+    const uid = userIdRef.current || (await ensureAnonSession());
+    userIdRef.current = uid;
     const { data, error } = await supabase
       .from("rides")
       .update({
         status: "accepted",
+        captain_user_id: uid,
         captain_device_id: did,
         captain_name: CAPTAIN.name,
         captain_plate: CAPTAIN.plate,
