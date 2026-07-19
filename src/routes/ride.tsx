@@ -102,7 +102,29 @@ function RidePage() {
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPickup({
+            label: "Current location",
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+          setLocating(false);
+        },
+        (err) => {
+          console.warn("geolocation failed", err);
+          setPickup((prev) => ({ ...prev, label: "Location unavailable — using city center" }));
+          setLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      );
+    } else {
+      setLocating(false);
+    }
   }, []);
+
 
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
