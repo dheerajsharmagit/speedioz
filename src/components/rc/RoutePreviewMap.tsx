@@ -73,7 +73,7 @@ export function RoutePreviewMap({ from, to, className }: Props) {
             map,
           });
           const bounds = new g.maps.LatLngBounds();
-          path.forEach((p) => bounds.extend(p));
+          path.forEach((p: google.maps.LatLng) => bounds.extend(p));
           map.fitBounds(bounds, 20);
         } else if (map) {
           const bounds = new g.maps.LatLngBounds();
