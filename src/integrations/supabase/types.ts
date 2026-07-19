@@ -106,6 +106,7 @@ export type Database = {
           captain_name: string | null
           captain_plate: string | null
           captain_rating: number | null
+          captain_user_id: string | null
           captain_vehicle: string | null
           created_at: string
           drop_label: string
@@ -120,6 +121,7 @@ export type Database = {
           pickup_lng: number
           rating: number | null
           rider_device_id: string
+          rider_user_id: string | null
           smart_route_savings_min: number
           status: string
           tip_inr: number
@@ -132,6 +134,7 @@ export type Database = {
           captain_name?: string | null
           captain_plate?: string | null
           captain_rating?: number | null
+          captain_user_id?: string | null
           captain_vehicle?: string | null
           created_at?: string
           drop_label: string
@@ -146,6 +149,7 @@ export type Database = {
           pickup_lng: number
           rating?: number | null
           rider_device_id: string
+          rider_user_id?: string | null
           smart_route_savings_min?: number
           status?: string
           tip_inr?: number
@@ -158,6 +162,7 @@ export type Database = {
           captain_name?: string | null
           captain_plate?: string | null
           captain_rating?: number | null
+          captain_user_id?: string | null
           captain_vehicle?: string | null
           created_at?: string
           drop_label?: string
@@ -172,6 +177,7 @@ export type Database = {
           pickup_lng?: number
           rating?: number | null
           rider_device_id?: string
+          rider_user_id?: string | null
           smart_route_savings_min?: number
           status?: string
           tip_inr?: number
