@@ -392,17 +392,44 @@ function RidePage() {
 
 
           <div className="pointer-events-none absolute left-6 right-6 top-6">
-            <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-              <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
-              {dest && (
-                <>
-                  <div className="my-2 h-px bg-border" />
-                  <p className="font-mono text-[10px] uppercase text-muted-foreground">Drop</p>
-                  <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
-                </>
-              )}
-            </div>
+            {showTurnByTurn && currentStep ? (
+              <div className="rounded-2xl bg-secondary/95 p-4 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-lg font-black text-secondary">
+                    {maneuverGlyph(currentStep.maneuver)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[9px] uppercase tracking-widest opacity-60">
+                      In {formatMeters(distanceToTurn)}
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-bold">{stripHtml(currentStep.instruction) || "Continue"}</p>
+                  </div>
+                </div>
+                {nextStep && (
+                  <p className="mt-2 truncate font-mono text-[10px] uppercase tracking-wider opacity-60">
+                    Then · {stripHtml(nextStep.instruction)}
+                  </p>
+                )}
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-primary transition-[width] duration-500"
+                    style={{ width: `${Math.round(tripProgress * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
+                <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
+                <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
+                {dest && (
+                  <>
+                    <div className="my-2 h-px bg-border" />
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">Drop</p>
+                    <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {etaLabel && etaMinutes !== null && (
