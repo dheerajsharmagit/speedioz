@@ -14,7 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      community_routes: {
+        Row: {
+          ai_confidence: number
+          created_at: string
+          encoded_polyline: string | null
+          from_label: string
+          from_lat: number
+          from_lng: number
+          id: string
+          safety_score: number
+          savings_min: number
+          title: string
+          to_label: string
+          to_lat: number
+          to_lng: number
+          verified_by: number
+        }
+        Insert: {
+          ai_confidence: number
+          created_at?: string
+          encoded_polyline?: string | null
+          from_label: string
+          from_lat: number
+          from_lng: number
+          id?: string
+          safety_score: number
+          savings_min: number
+          title: string
+          to_label: string
+          to_lat: number
+          to_lng: number
+          verified_by?: number
+        }
+        Update: {
+          ai_confidence?: number
+          created_at?: string
+          encoded_polyline?: string | null
+          from_label?: string
+          from_lat?: number
+          from_lng?: number
+          id?: string
+          safety_score?: number
+          savings_min?: number
+          title?: string
+          to_label?: string
+          to_lat?: number
+          to_lng?: number
+          verified_by?: number
+        }
+        Relationships: []
+      }
+      ride_locations: {
+        Row: {
+          created_at: string
+          heading: number | null
+          id: string
+          lat: number
+          lng: number
+          ride_id: string
+        }
+        Insert: {
+          created_at?: string
+          heading?: number | null
+          id?: string
+          lat: number
+          lng: number
+          ride_id: string
+        }
+        Update: {
+          created_at?: string
+          heading?: number | null
+          id?: string
+          lat?: number
+          lng?: number
+          ride_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ride_locations_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rides: {
+        Row: {
+          captain_device_id: string | null
+          captain_name: string | null
+          captain_plate: string | null
+          captain_rating: number | null
+          captain_vehicle: string | null
+          created_at: string
+          drop_label: string
+          drop_lat: number
+          drop_lng: number
+          fare_inr: number
+          id: string
+          otp: string
+          payment_method: string
+          pickup_label: string
+          pickup_lat: number
+          pickup_lng: number
+          rating: number | null
+          rider_device_id: string
+          smart_route_savings_min: number
+          status: string
+          tip_inr: number
+          updated_at: string
+          use_smart_route: boolean
+          vehicle_type: string
+        }
+        Insert: {
+          captain_device_id?: string | null
+          captain_name?: string | null
+          captain_plate?: string | null
+          captain_rating?: number | null
+          captain_vehicle?: string | null
+          created_at?: string
+          drop_label: string
+          drop_lat: number
+          drop_lng: number
+          fare_inr: number
+          id?: string
+          otp: string
+          payment_method?: string
+          pickup_label: string
+          pickup_lat: number
+          pickup_lng: number
+          rating?: number | null
+          rider_device_id: string
+          smart_route_savings_min?: number
+          status?: string
+          tip_inr?: number
+          updated_at?: string
+          use_smart_route?: boolean
+          vehicle_type?: string
+        }
+        Update: {
+          captain_device_id?: string | null
+          captain_name?: string | null
+          captain_plate?: string | null
+          captain_rating?: number | null
+          captain_vehicle?: string | null
+          created_at?: string
+          drop_label?: string
+          drop_lat?: number
+          drop_lng?: number
+          fare_inr?: number
+          id?: string
+          otp?: string
+          payment_method?: string
+          pickup_label?: string
+          pickup_lat?: number
+          pickup_lng?: number
+          rating?: number | null
+          rider_device_id?: string
+          smart_route_savings_min?: number
+          status?: string
+          tip_inr?: number
+          updated_at?: string
+          use_smart_route?: boolean
+          vehicle_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

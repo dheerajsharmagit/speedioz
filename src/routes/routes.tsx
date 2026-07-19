@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { RoleNav } from "@/components/rc/RoleNav";
+import { RoutePreviewMap } from "@/components/rc/RoutePreviewMap";
+import { supabase } from "@/integrations/supabase/client";
+import type { CommunityRoute } from "@/lib/rides";
 
 export const Route = createFileRoute("/routes")({
   head: () => ({
@@ -11,16 +15,19 @@ export const Route = createFileRoute("/routes")({
   component: RoutesPage,
 });
 
-const communityRoutes = [
-  { name: "MG Road → Cubbon Park via Kasturba", km: 2.4, time: 8, saved: 6, votes: 214, uses: 1820, safety: 96, ai: 94, captain: "Rahul S." },
-  { name: "HSR → Koramangala via 27th Main", km: 4.1, time: 11, saved: 9, votes: 342, uses: 4120, safety: 98, ai: 97, captain: "Priya M." },
-  { name: "Airport → Hebbal via Trumpet B", km: 21.4, time: 22, saved: 14, votes: 89, uses: 612, safety: 92, ai: 88, captain: "Anil K." },
-  { name: "Silk Board → BTM via service lane", km: 3.2, time: 9, saved: 11, votes: 421, uses: 5240, safety: 94, ai: 96, captain: "Deepa V." },
-  { name: "Whitefield → Marathahalli via ITPL back", km: 6.8, time: 14, saved: 8, votes: 156, uses: 1104, safety: 90, ai: 91, captain: "Karthik R." },
-  { name: "Yeshwanthpur → Rajaji Nagar via 8th cross", km: 3.9, time: 10, saved: 7, votes: 98, uses: 720, safety: 95, ai: 89, captain: "Neha B." },
-];
-
 function RoutesPage() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["community-routes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("community_routes")
+        .select("*")
+        .order("savings_min", { ascending: false });
+      if (error) throw error;
+      return data as CommunityRoute[];
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground">
       <RoleNav />
@@ -49,35 +56,60 @@ function RoutesPage() {
           ))}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {communityRoutes.map((r) => (
-            <article key={r.name} className="animate-fade-up rounded-3xl border border-border bg-card p-6">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <h3 className="text-base font-extrabold leading-tight">{r.name}</h3>
-                <span className="shrink-0 rounded bg-accent/15 px-2 py-1 font-mono text-[10px] font-bold uppercase text-accent">
-                  −{r.saved}m
-                </span>
-              </div>
+        {isLoading && <SkeletonGrid />}
+        {error && (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
+            Couldn&apos;t load routes.
+          </div>
+        )}
+        {data && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {data.map((r) => (
+              <article key={r.id} className="animate-fade-up overflow-hidden rounded-3xl border border-border bg-card">
+                <div className="h-40 w-full bg-muted">
+                  <RoutePreviewMap
+                    from={{ lat: r.from_lat, lng: r.from_lng }}
+                    to={{ lat: r.to_lat, lng: r.to_lng }}
+                    className="h-40 w-full"
+                  />
+                </div>
+                <div className="p-6">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <h3 className="text-base font-extrabold leading-tight">{r.title}</h3>
+                    <span className="shrink-0 rounded bg-accent/15 px-2 py-1 font-mono text-[10px] font-bold uppercase text-accent">
+                      −{r.savings_min}m
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-3 gap-3 border-y border-border py-4">
-                <Metric label="Distance" value={`${r.km} km`} />
-                <Metric label="Time" value={`${r.time} min`} />
-                <Metric label="Uses" value={r.uses.toLocaleString()} />
-              </div>
+                  <p className="mb-4 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {r.from_label} → {r.to_label}
+                  </p>
 
-              <div className="mt-4 space-y-2">
-                <Bar label="Safety" value={r.safety} />
-                <Bar label="AI confidence" value={r.ai} />
-              </div>
+                  <div className="grid grid-cols-2 gap-3 border-y border-border py-3">
+                    <Metric label="Verified by" value={`${r.verified_by} captains`} />
+                    <Metric label="Time saved" value={`${r.savings_min} min`} />
+                  </div>
 
-              <div className="mt-5 flex items-center justify-between">
-                <p className="font-mono text-[10px] uppercase text-muted-foreground">by {r.captain}</p>
-                <p className="font-mono text-[10px] font-bold uppercase text-secondary">↑ {r.votes}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+                  <div className="mt-4 space-y-2">
+                    <Bar label="Safety" value={r.safety_score} />
+                    <Bar label="AI confidence" value={r.ai_confidence} />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="h-80 animate-pulse rounded-3xl bg-muted" />
+      ))}
     </div>
   );
 }

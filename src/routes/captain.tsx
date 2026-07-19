@@ -1,22 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceId } from "@/lib/device-id";
+import type { Ride } from "@/lib/rides";
 
 export const Route = createFileRoute("/captain")({
   head: () => ({
     meta: [
       { title: "Captain Portal — RideConnect AI" },
-      { name: "description", content: "Earnings, ride requests, and community route submissions for RideConnect captains." },
+      { name: "description", content: "Real-time ride requests, earnings, and community route submissions for RideConnect captains." },
     ],
   }),
   component: CaptainPage,
 });
 
-const requests = [
-  { id: "r1", from: "HSR Layout, Sector 2", to: "Koramangala 5th Block", km: 4.2, fare: 68, community: true },
-  { id: "r2", from: "Indiranagar Metro", to: "MG Road", km: 6.8, fare: 105 },
-  { id: "r3", from: "Manyata Tech Park", to: "Hebbal Flyover", km: 3.4, fare: 55, community: true },
-];
+const CAPTAIN = {
+  name: "Rajesh K.",
+  plate: "KA·05·MH·4421",
+  vehicle: "Honda Activa · Yellow",
+  rating: 4.94,
+};
 
 const leaderboard = [
   { name: "Rahul S.", trips: 34, saved: "142 min", rank: 1 },
@@ -27,6 +31,94 @@ const leaderboard = [
 
 function CaptainPage() {
   const [online, setOnline] = useState(true);
+  const [pending, setPending] = useState<Ride[]>([]);
+  const [active, setActive] = useState<Ride | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const deviceIdRef = useRef<string>("");
+
+  useEffect(() => { deviceIdRef.current = getDeviceId(); }, []);
+
+  // Load current state
+  useEffect(() => {
+    if (!online) { setPending([]); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("rides")
+        .select("*")
+        .eq("status", "searching")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (!cancelled) setPending((data as Ride[]) ?? []);
+
+      // Restore my active ride if any
+      const did = deviceIdRef.current || getDeviceId();
+      const { data: mine } = await supabase
+        .from("rides")
+        .select("*")
+        .eq("captain_device_id", did)
+        .in("status", ["accepted", "arriving", "in_progress", "completed"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled && mine) setActive(mine as Ride);
+    })();
+    return () => { cancelled = true; };
+  }, [online]);
+
+  // Realtime: pending queue
+  useEffect(() => {
+    if (!online) return;
+    const channel = supabase
+      .channel("captain-pending")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "rides" },
+        (payload) => {
+          const row = payload.new as Ride;
+          if (row.status === "searching") setPending((p) => [row, ...p].slice(0, 10));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rides" },
+        (payload) => {
+          const row = payload.new as Ride;
+          setPending((p) => p.filter((r) => r.id !== row.id || row.status === "searching"));
+          if (active && row.id === active.id) setActive(row);
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [online, active?.id]);
+
+  async function accept(ride: Ride) {
+    setError(null);
+    const did = deviceIdRef.current || getDeviceId();
+    const { data, error } = await supabase
+      .from("rides")
+      .update({
+        status: "accepted",
+        captain_device_id: did,
+        captain_name: CAPTAIN.name,
+        captain_plate: CAPTAIN.plate,
+        captain_vehicle: CAPTAIN.vehicle,
+        captain_rating: CAPTAIN.rating,
+      })
+      .eq("id", ride.id)
+      .eq("status", "searching") // don't grab if already taken
+      .select()
+      .maybeSingle();
+    if (error) { setError(error.message); return; }
+    if (!data) { setError("Ride was already taken."); return; }
+    setActive(data as Ride);
+    setPending((p) => p.filter((r) => r.id !== ride.id));
+  }
+
+  async function decline(rideId: string) {
+    setPending((p) => p.filter((r) => r.id !== rideId));
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground">
       <RoleNav />
@@ -34,7 +126,7 @@ function CaptainPage() {
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 pb-8">
           <div className="min-w-0">
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Captain portal</p>
-            <h1 className="mt-2 truncate text-3xl font-extrabold tracking-tight md:text-4xl">Namaste, Ravi.</h1>
+            <h1 className="mt-2 truncate text-3xl font-extrabold tracking-tight md:text-4xl">Namaste, {CAPTAIN.name.split(" ")[0]}.</h1>
           </div>
           <button
             onClick={() => setOnline((v) => !v)}
@@ -50,51 +142,83 @@ function CaptainPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <StatCard label="Today's earnings" value="₹1,240" sub="+18% vs yesterday" accent />
           <StatCard label="Trips completed" value="14" sub="6 community routes" />
-          <StatCard label="Rating" value="4.94" sub="last 30 days" />
+          <StatCard label="Rating" value={CAPTAIN.rating.toFixed(2)} sub="last 30 days" />
           <StatCard label="Fuel bonus" value="₹340" sub="unlocked" />
         </div>
+
+        {active && <ActiveRidePanel ride={active} />}
 
         <div className="mt-10 grid gap-6 lg:grid-cols-[2fr_1fr]">
           <section className="rounded-3xl border border-border bg-card p-6">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-lg font-extrabold">Incoming ride requests</h2>
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Live · {requests.length} nearby
+                {online ? `Live · ${pending.length} nearby` : "Offline"}
               </span>
             </div>
+
+            {error && <p className="mb-3 text-xs font-semibold text-destructive">{error}</p>}
+
+            {!online && (
+              <div className="rounded-2xl bg-muted p-6 text-center text-sm text-muted-foreground">
+                Go online to receive requests.
+              </div>
+            )}
+
+            {online && pending.length === 0 && !active && (
+              <div className="rounded-2xl bg-muted p-6 text-center text-sm text-muted-foreground">
+                Waiting for the next request…
+              </div>
+            )}
+
             <div className="space-y-3">
-              {requests.map((r) => (
-                <div key={r.id} className="rounded-2xl border border-border p-4">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                    <div className="min-w-0">
-                      <div className="mb-2 flex items-center gap-2">
-                        <div className="h-2 w-2 shrink-0 rounded-full bg-accent" />
-                        <p className="truncate text-sm font-semibold">{r.from}</p>
+              {pending.map((r) => {
+                const km = haversine(r.pickup_lat, r.pickup_lng, r.drop_lat, r.drop_lng).toFixed(1);
+                return (
+                  <div key={r.id} className="rounded-2xl border border-border p-4">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-2 flex items-center gap-2">
+                          <div className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+                          <p className="truncate text-sm font-semibold">{r.pickup_label}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 shrink-0 rounded-full bg-secondary" />
+                          <p className="truncate text-sm font-semibold">{r.drop_label}</p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <span>{km} km</span>
+                          <span>·</span>
+                          <span>{r.vehicle_type}</span>
+                          {r.use_smart_route && (
+                            <span className="rounded bg-primary/20 px-1.5 py-0.5 font-bold text-secondary">
+                              Community shortcut
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 shrink-0 rounded-full bg-secondary" />
-                        <p className="truncate text-sm font-semibold">{r.to}</p>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <p className="text-2xl font-extrabold">₹{r.fare_inr}</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => decline(r.id)}
+                            className="rounded-full border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase"
+                          >
+                            Pass
+                          </button>
+                          <button
+                            onClick={() => accept(r)}
+                            disabled={!!active}
+                            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-secondary transition-transform active:scale-95 disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <span>{r.km} km</span>
-                        <span>·</span>
-                        <span>≈ 12 min</span>
-                        {r.community && (
-                          <span className="rounded bg-primary/20 px-1.5 py-0.5 font-bold text-secondary">
-                            Community shortcut
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-2">
-                      <p className="text-2xl font-extrabold">₹{r.fare}</p>
-                      <button className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-secondary transition-transform active:scale-95">
-                        Accept
-                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-6 rounded-2xl bg-secondary p-5 text-secondary-foreground">
@@ -140,6 +264,37 @@ function CaptainPage() {
   );
 }
 
+function ActiveRidePanel({ ride }: { ride: Ride }) {
+  const km = haversine(ride.pickup_lat, ride.pickup_lng, ride.drop_lat, ride.drop_lng).toFixed(1);
+  const stageLabel: Record<string, string> = {
+    accepted: "Heading to pickup",
+    arriving: "At pickup — collect OTP",
+    in_progress: "En route to drop",
+    completed: "Waiting for rider payment & rating",
+    rated: "Complete",
+  };
+  return (
+    <section className="mt-8 overflow-hidden rounded-3xl bg-secondary p-6 text-secondary-foreground">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary">Active ride</p>
+          <h2 className="mt-2 text-2xl font-extrabold">{stageLabel[ride.status] ?? ride.status}</h2>
+          <p className="mt-1 text-xs text-secondary-foreground/60">
+            {ride.pickup_label} → {ride.drop_label} · {km} km · ₹{ride.fare_inr}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-primary p-3 text-center text-secondary">
+          <p className="font-mono text-[9px] font-bold uppercase">OTP</p>
+          <p className="text-2xl font-extrabold tracking-widest">{ride.otp}</p>
+        </div>
+      </div>
+      <p className="mt-4 text-[10px] font-mono uppercase text-secondary-foreground/50">
+        The rider&apos;s screen advances automatically as you progress. Live location pings are sent every 1–2 seconds while accepted or in-progress.
+      </p>
+    </section>
+  );
+}
+
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub: string; accent?: boolean }) {
   return (
     <div className={`rounded-3xl p-6 ${accent ? "bg-primary text-secondary" : "border border-border bg-card"}`}>
@@ -150,4 +305,16 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
       <p className={`mt-1 text-xs ${accent ? "opacity-70" : "text-muted-foreground"}`}>{sub}</p>
     </div>
   );
+}
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
