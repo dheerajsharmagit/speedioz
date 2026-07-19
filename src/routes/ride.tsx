@@ -90,6 +90,7 @@ function RidePage() {
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
+  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
   const [approachPolyline, setApproachPolyline] = useState<string>("");
   const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
   const [rating, setRating] = useState(0);
