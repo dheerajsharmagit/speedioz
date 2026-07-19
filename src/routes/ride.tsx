@@ -82,7 +82,10 @@ function computeEtaMinutes(
 function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
-  const [dest, setDest] = useState<typeof DESTS[number] | null>(null);
+  const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
+  const [locating, setLocating] = useState(true);
+  const [destQuery, setDestQuery] = useState("");
+  const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("upi");
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
