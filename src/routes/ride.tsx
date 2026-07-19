@@ -335,6 +335,25 @@ function RidePage() {
         ? "Drop in"
         : null;
 
+  // Turn-by-turn: pick active step based on captain position along the main route.
+  const showTurnByTurn = step === "inprogress" && routeSteps.length > 0 && captainPos !== null;
+  const activeStepIdx = showTurnByTurn ? activeStepIndex(routeSteps, captainPos!) : -1;
+  const currentStep = activeStepIdx >= 0 ? routeSteps[activeStepIdx] : null;
+  const nextStep = activeStepIdx >= 0 && activeStepIdx + 1 < routeSteps.length ? routeSteps[activeStepIdx + 1] : null;
+  const distanceToTurn = currentStep && captainPos
+    ? haversineKm(captainPos, { lat: currentStep.endLat, lng: currentStep.endLng }) * 1000
+    : 0;
+
+  // Overall trip progress (0..1) — how far captain has gone along main route.
+  const tripProgress = (() => {
+    if (step !== "inprogress" || !captainPos || routeSteps.length === 0) return 0;
+    const total = routeSteps.reduce((s, x) => s + x.distanceMeters, 0);
+    if (total === 0) return 0;
+    const passed = routeSteps.slice(0, activeStepIdx).reduce((s, x) => s + x.distanceMeters, 0);
+    return Math.min(1, Math.max(0, passed / total));
+  })();
+
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <RoleNav />
