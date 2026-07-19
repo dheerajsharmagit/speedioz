@@ -233,6 +233,25 @@ function RidePage() {
   const mapPickup = { lat: PICKUP.lat, lng: PICKUP.lng };
   const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: PICKUP.lat + 0.03, lng: PICKUP.lng + 0.03 };
 
+  // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
+  const activePolyline =
+    (step === "matched" || step === "arriving") && approachPolyline ? approachPolyline : encodedPolyline;
+
+  // Live ETA (in minutes) — haversine distance / assumed average speed.
+  const etaTarget =
+    step === "matched" || step === "arriving"
+      ? mapPickup
+      : step === "inprogress"
+        ? mapDrop
+        : null;
+  const etaMinutes = captainPos && etaTarget ? computeEtaMinutes(captainPos, etaTarget, selected) : null;
+  const etaLabel =
+    step === "matched" || step === "arriving"
+      ? "Captain arriving in"
+      : step === "inprogress"
+        ? "Drop in"
+        : null;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <RoleNav />
@@ -266,7 +285,7 @@ function RidePage() {
               pickup={mapPickup}
               drop={mapDrop}
               captain={captainPos}
-              polyline={encodedPolyline}
+              polyline={activePolyline}
               className="h-full w-full"
             />
           ) : (
@@ -291,7 +310,19 @@ function RidePage() {
               )}
             </div>
           </div>
+
+          {etaLabel && etaMinutes !== null && (
+            <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
+              <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/5">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{etaLabel}</span>
+                <span className="text-sm font-extrabold">{etaMinutes} min</span>
+              </div>
+            </div>
+          )}
         </div>
+
+
 
         {/* Bottom sheet */}
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
