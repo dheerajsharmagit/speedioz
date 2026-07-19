@@ -325,23 +325,15 @@ function RidePage() {
         </div>
 
         {/* Map area */}
-        <div className="relative flex-1 overflow-hidden">
-          {dest ? (
-            <RideMap
-              pickup={mapPickup}
-              drop={mapDrop}
-              captain={captainPos}
-              polyline={activePolyline}
-              className="h-full w-full"
-            />
-          ) : (
-            <div className="grid h-full w-full place-items-center bg-muted">
-              <div className="text-center">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Live map</p>
-                <p className="mt-2 text-sm font-bold">Pick a destination to preview your route</p>
-              </div>
-            </div>
-          )}
+        <div className="relative min-h-[360px] flex-1 overflow-hidden">
+          <RideMap
+            pickup={mapPickup}
+            drop={dest ? mapDrop : mapPickup}
+            captain={captainPos}
+            polyline={dest ? activePolyline : ""}
+            className="h-full w-full"
+          />
+
 
           <div className="pointer-events-none absolute left-6 right-6 top-6">
             <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
