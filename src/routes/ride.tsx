@@ -63,6 +63,25 @@ function stepFromStatus(status: RideStatus): UiStep {
   }
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function computeEtaMinutes(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  vehicle: string,
+): number {
+  const km = haversineKm(from, to);
+  const avgKmh = vehicle === "auto" ? 22 : 28; // rough urban avg
+  const minutes = Math.round((km / avgKmh) * 60);
+  return Math.max(1, minutes);
+
 function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
