@@ -303,6 +303,7 @@ function RidePage() {
     setDest(null);
     setDestQuery("");
     setEncodedPolyline("");
+    setRouteSteps([]);
     setApproachPolyline("");
     approachFetchedRef.current = null;
     setCaptainPos(null);
