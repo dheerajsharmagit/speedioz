@@ -68,20 +68,40 @@ export const computeRoute = createServerFn({ method: "POST" })
         duration?: string;
         distanceMeters?: number;
         polyline?: { encodedPolyline?: string };
+        legs?: Array<{
+          steps?: Array<{
+            navigationInstruction?: { instructions?: string; maneuver?: string };
+            distanceMeters?: number;
+            endLocation?: { latLng?: { latitude?: number; longitude?: number } };
+            polyline?: { encodedPolyline?: string };
+          }>;
+        }>;
       }>;
     };
 
     const route = payload.routes?.[0];
     if (!route?.polyline?.encodedPolyline) {
-      return { encodedPolyline: "", distanceMeters: 0, durationSeconds: 0 };
+      return { encodedPolyline: "", distanceMeters: 0, durationSeconds: 0, steps: [] };
     }
 
     // duration is a Duration string like "1234s"
     const durationSeconds = route.duration ? parseInt(route.duration.replace(/[^0-9]/g, ""), 10) : 0;
 
+    const steps = (route.legs ?? []).flatMap((leg) =>
+      (leg.steps ?? []).map((s) => ({
+        instruction: s.navigationInstruction?.instructions ?? "",
+        maneuver: s.navigationInstruction?.maneuver ?? "",
+        distanceMeters: s.distanceMeters ?? 0,
+        endLat: s.endLocation?.latLng?.latitude ?? 0,
+        endLng: s.endLocation?.latLng?.longitude ?? 0,
+        encodedPolyline: s.polyline?.encodedPolyline ?? "",
+      })),
+    );
+
     return {
       encodedPolyline: route.polyline.encodedPolyline,
       distanceMeters: route.distanceMeters ?? 0,
       durationSeconds,
+      steps,
     };
   });
