@@ -512,7 +512,7 @@ function RidePage() {
           {step === "inprogress" && ride && (
             <RideStatusStep
               title="On the way"
-              subtitle={`22 min via Smart Route${useSmartRoute ? " · saving 12 min" : ""}`}
+              subtitle={`${etaMinutes ?? "—"} min to drop · ${Math.round(tripProgress * 100)}% complete${useSmartRoute ? " · saving 12 min" : ""}`}
               ride={ride}
               onNext={simulateCompleted}
               ctaLabel="Simulate arrival"
