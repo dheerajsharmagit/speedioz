@@ -166,7 +166,7 @@ function RidePage() {
       try {
         const res = await computeRoute({
           data: {
-            origin: { lat: PICKUP.lat, lng: PICKUP.lng },
+            origin: { lat: pickup.lat, lng: pickup.lng },
             destination: { lat: dest.lat, lng: dest.lng },
             travelMode: selected === "auto" ? "DRIVE" : "TWO_WHEELER",
           },
@@ -190,9 +190,9 @@ function RidePage() {
         .insert({
           rider_user_id: uid,
           rider_device_id: deviceIdRef.current,
-          pickup_label: PICKUP.label,
-          pickup_lat: PICKUP.lat,
-          pickup_lng: PICKUP.lng,
+          pickup_label: pickup.label,
+          pickup_lat: pickup.lat,
+          pickup_lng: pickup.lng,
           drop_label: dest.addr,
           drop_lat: dest.lat,
           drop_lng: dest.lng,
@@ -253,8 +253,8 @@ function RidePage() {
     setStep("destination");
   }
 
-  const mapPickup = { lat: PICKUP.lat, lng: PICKUP.lng };
-  const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: PICKUP.lat + 0.03, lng: PICKUP.lng + 0.03 };
+  const mapPickup = { lat: pickup.lat, lng: pickup.lng };
+  const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 };
 
   // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
   const activePolyline =
@@ -323,7 +323,7 @@ function RidePage() {
           <div className="pointer-events-none absolute left-6 right-6 top-6">
             <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-              <p className="mt-1 text-xs font-semibold">{PICKUP.label}</p>
+              <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
               {dest && (
                 <>
                   <div className="my-2 h-px bg-border" />
