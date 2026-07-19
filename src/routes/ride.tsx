@@ -139,9 +139,12 @@ function RidePage() {
     if (!dest) return;
     setCreating(true);
     try {
+      const uid = userIdRef.current || (await ensureAnonSession());
+      userIdRef.current = uid;
       const { data, error } = await supabase
         .from("rides")
         .insert({
+          rider_user_id: uid,
           rider_device_id: deviceIdRef.current,
           pickup_label: PICKUP.label,
           pickup_lat: PICKUP.lat,
