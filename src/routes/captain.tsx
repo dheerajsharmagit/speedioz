@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceId } from "@/lib/device-id";
+import { ensureAnonSession } from "@/lib/anon-session";
 import type { Ride } from "@/lib/rides";
 
 export const Route = createFileRoute("/captain")({
