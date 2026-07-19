@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import { type GooglePlacesLibrary, loadGoogleMaps } from "@/lib/google-maps-loader";
 
 export type PlaceResult = { name: string; addr: string; lat: number; lng: number };
 
@@ -22,7 +22,7 @@ type Suggestion = {
 export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Props) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const sessionTokenRef = useRef<unknown>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reqIdRef = useRef(0);
 
@@ -37,8 +37,7 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       setLoading(true);
       try {
         const g = await loadGoogleMaps();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const places = (await g.maps.importLibrary("places")) as any;
+        const places = (await g.maps.importLibrary("places")) as GooglePlacesLibrary;
         if (!sessionTokenRef.current) {
           sessionTokenRef.current = new places.AutocompleteSessionToken();
         }

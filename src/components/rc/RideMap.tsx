@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import {
+  type GoogleMap,
+  type GoogleMarker,
+  type GooglePolyline,
+  loadGoogleMaps,
+} from "@/lib/google-maps-loader";
 
 type LatLng = { lat: number; lng: number };
 
@@ -13,11 +18,11 @@ interface RideMapProps {
 
 export function RideMap({ pickup, drop, captain, polyline, className }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const pickupMarkerRef = useRef<google.maps.Marker | null>(null);
-  const dropMarkerRef = useRef<google.maps.Marker | null>(null);
-  const captainMarkerRef = useRef<google.maps.Marker | null>(null);
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
+  const mapRef = useRef<GoogleMap | null>(null);
+  const pickupMarkerRef = useRef<GoogleMarker | null>(null);
+  const dropMarkerRef = useRef<GoogleMarker | null>(null);
+  const captainMarkerRef = useRef<GoogleMarker | null>(null);
+  const polylineRef = useRef<GooglePolyline | null>(null);
 
   // Init map once
   useEffect(() => {
@@ -91,8 +96,9 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
   useEffect(() => {
     pickupMarkerRef.current?.setPosition(pickup);
     dropMarkerRef.current?.setPosition(drop);
-    if (mapRef.current) {
-      const bounds = new google.maps.LatLngBounds();
+    const g = window.google;
+    if (mapRef.current && g) {
+      const bounds = new g.maps.LatLngBounds();
       bounds.extend(pickup);
       bounds.extend(drop);
       if (captain) bounds.extend(captain);
@@ -102,13 +108,14 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
 
   // Update polyline
   useEffect(() => {
-    if (!mapRef.current || !window.google) return;
+    const g = window.google;
+    if (!mapRef.current || !g) return;
     polylineRef.current?.setMap(null);
     if (!polyline) return;
 
-    const path = google.maps.geometry?.encoding?.decodePath?.(polyline);
+    const path = g.maps.geometry.encoding.decodePath(polyline);
     if (!path) return;
-    polylineRef.current = new google.maps.Polyline({
+    polylineRef.current = new g.maps.Polyline({
       path,
       strokeColor: "#111827",
       strokeOpacity: 0.9,
@@ -119,14 +126,15 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
 
   // Update captain marker
   useEffect(() => {
-    if (!mapRef.current || !window.google) return;
+    const g = window.google;
+    if (!mapRef.current || !g) return;
     if (!captain) {
       captainMarkerRef.current?.setMap(null);
       captainMarkerRef.current = null;
       return;
     }
     if (!captainMarkerRef.current) {
-      captainMarkerRef.current = new google.maps.Marker({
+      captainMarkerRef.current = new g.maps.Marker({
         position: captain,
         map: mapRef.current,
         title: "Captain",
