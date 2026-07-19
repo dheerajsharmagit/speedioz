@@ -247,6 +247,8 @@ function RidePage() {
     setRide(null);
     setDest(null);
     setEncodedPolyline("");
+    setApproachPolyline("");
+    approachFetchedRef.current = null;
     setCaptainPos(null);
     setRating(0);
     setTip(0);
