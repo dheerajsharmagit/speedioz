@@ -98,11 +98,17 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
     dropMarkerRef.current?.setPosition(drop);
     const g = window.google;
     if (mapRef.current && g) {
-      const bounds = new g.maps.LatLngBounds();
-      bounds.extend(pickup);
-      bounds.extend(drop);
-      if (captain) bounds.extend(captain);
-      mapRef.current.fitBounds(bounds, 60);
+      const same = pickup.lat === drop.lat && pickup.lng === drop.lng && !captain;
+      if (same) {
+        (mapRef.current as unknown as { setCenter: (p: LatLng) => void; setZoom: (z: number) => void }).setCenter(pickup);
+        (mapRef.current as unknown as { setCenter: (p: LatLng) => void; setZoom: (z: number) => void }).setZoom(15);
+      } else {
+        const bounds = new g.maps.LatLngBounds();
+        bounds.extend(pickup);
+        bounds.extend(drop);
+        if (captain) bounds.extend(captain);
+        mapRef.current.fitBounds(bounds, 60);
+      }
     }
   }, [pickup, drop, captain]);
 
