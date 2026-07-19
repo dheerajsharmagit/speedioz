@@ -32,7 +32,15 @@ export const computeRoute = createServerFn({ method: "POST" })
         Authorization: `Bearer ${lovableKey}`,
         "X-Connection-Api-Key": gmKey,
         "Content-Type": "application/json",
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+        "X-Goog-FieldMask": [
+          "routes.duration",
+          "routes.distanceMeters",
+          "routes.polyline.encodedPolyline",
+          "routes.legs.steps.navigationInstruction",
+          "routes.legs.steps.distanceMeters",
+          "routes.legs.steps.endLocation",
+          "routes.legs.steps.polyline.encodedPolyline",
+        ].join(","),
       },
       body: JSON.stringify(body),
     });
