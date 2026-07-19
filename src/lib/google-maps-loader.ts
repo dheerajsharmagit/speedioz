@@ -30,7 +30,7 @@ export function loadGoogleMaps(): Promise<typeof google> {
     };
     const script = document.createElement("script");
     const channel = trackingId ? `&channel=${encodeURIComponent(trackingId)}` : "";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(browserKey)}&loading=async&callback=__rcInitGoogleMaps${channel}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(browserKey)}&loading=async&libraries=geometry&callback=__rcInitGoogleMaps${channel}`;
     script.async = true;
     script.defer = true;
     script.onerror = () => reject(new Error("Google Maps script failed to load"));
