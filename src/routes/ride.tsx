@@ -116,6 +116,29 @@ function RidePage() {
     return () => { supabase.removeChannel(channel); };
   }, [ride?.id]);
 
+  // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
+  useEffect(() => {
+    if (!ride || !captainPos) return;
+    if (ride.status !== "accepted" && ride.status !== "arriving") return;
+    if (approachFetchedRef.current === ride.id) return;
+    approachFetchedRef.current = ride.id;
+    (async () => {
+      try {
+        const res = await computeRoute({
+          data: {
+            origin: { lat: captainPos.lat, lng: captainPos.lng },
+            destination: { lat: ride.pickup_lat, lng: ride.pickup_lng },
+            travelMode: ride.vehicle_type === "auto" ? "DRIVE" : "TWO_WHEELER",
+          },
+        });
+        setApproachPolyline(res.encodedPolyline);
+      } catch (e) {
+        console.warn("approach route failed", e);
+      }
+    })();
+  }, [ride?.id, ride?.status, captainPos]);
+
+
   // Compute polyline when destination is picked
   useEffect(() => {
     if (!dest) return;
