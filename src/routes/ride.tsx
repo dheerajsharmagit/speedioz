@@ -63,6 +63,28 @@ function stepFromStatus(status: RideStatus): UiStep {
   }
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function computeEtaMinutes(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  vehicle: string,
+): number {
+  const km = haversineKm(from, to);
+  const avgKmh = vehicle === "auto" ? 22 : 28; // rough urban avg
+  const minutes = Math.round((km / avgKmh) * 60);
+  return Math.max(1, minutes);
+}
+
+
+
 function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
@@ -71,12 +93,14 @@ function RidePage() {
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
+  const [approachPolyline, setApproachPolyline] = useState<string>("");
   const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
   const [rating, setRating] = useState(0);
   const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
+  const approachFetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
@@ -113,6 +137,29 @@ function RidePage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [ride?.id]);
+
+  // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
+  useEffect(() => {
+    if (!ride || !captainPos) return;
+    if (ride.status !== "accepted" && ride.status !== "arriving") return;
+    if (approachFetchedRef.current === ride.id) return;
+    approachFetchedRef.current = ride.id;
+    (async () => {
+      try {
+        const res = await computeRoute({
+          data: {
+            origin: { lat: captainPos.lat, lng: captainPos.lng },
+            destination: { lat: ride.pickup_lat, lng: ride.pickup_lng },
+            travelMode: ride.vehicle_type === "auto" ? "DRIVE" : "TWO_WHEELER",
+          },
+        });
+        setApproachPolyline(res.encodedPolyline);
+      } catch (e) {
+        console.warn("approach route failed", e);
+      }
+    })();
+  }, [ride?.id, ride?.status, captainPos]);
+
 
   // Compute polyline when destination is picked
   useEffect(() => {
@@ -179,6 +226,8 @@ function RidePage() {
     }
     setRide(null);
     setEncodedPolyline("");
+    setApproachPolyline("");
+    approachFetchedRef.current = null;
     setCaptainPos(null);
     setStep("confirm");
   }
@@ -198,6 +247,8 @@ function RidePage() {
     setRide(null);
     setDest(null);
     setEncodedPolyline("");
+    setApproachPolyline("");
+    approachFetchedRef.current = null;
     setCaptainPos(null);
     setRating(0);
     setTip(0);
@@ -207,6 +258,25 @@ function RidePage() {
 
   const mapPickup = { lat: PICKUP.lat, lng: PICKUP.lng };
   const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: PICKUP.lat + 0.03, lng: PICKUP.lng + 0.03 };
+
+  // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
+  const activePolyline =
+    (step === "matched" || step === "arriving") && approachPolyline ? approachPolyline : encodedPolyline;
+
+  // Live ETA (in minutes) — haversine distance / assumed average speed.
+  const etaTarget =
+    step === "matched" || step === "arriving"
+      ? mapPickup
+      : step === "inprogress"
+        ? mapDrop
+        : null;
+  const etaMinutes = captainPos && etaTarget ? computeEtaMinutes(captainPos, etaTarget, selected) : null;
+  const etaLabel =
+    step === "matched" || step === "arriving"
+      ? "Captain arriving in"
+      : step === "inprogress"
+        ? "Drop in"
+        : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -241,7 +311,7 @@ function RidePage() {
               pickup={mapPickup}
               drop={mapDrop}
               captain={captainPos}
-              polyline={encodedPolyline}
+              polyline={activePolyline}
               className="h-full w-full"
             />
           ) : (
@@ -266,7 +336,19 @@ function RidePage() {
               )}
             </div>
           </div>
+
+          {etaLabel && etaMinutes !== null && (
+            <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
+              <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/5">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{etaLabel}</span>
+                <span className="text-sm font-extrabold">{etaMinutes} min</span>
+              </div>
+            </div>
+          )}
         </div>
+
+
 
         {/* Bottom sheet */}
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
