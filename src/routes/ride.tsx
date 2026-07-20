@@ -365,6 +365,24 @@ function RidePage() {
     return Math.min(1, Math.max(0, passed / total));
   })();
 
+  // Live distance remaining — captain→pickup during pickup phase, captain→drop along route during trip.
+  const distanceRemainingM = (() => {
+    if ((step === "matched" || step === "arriving") && captainPos) {
+      return haversineKm(captainPos, mapPickup) * 1000;
+    }
+    if (step === "inprogress" && captainPos && routeSteps.length > 0 && activeStepIdx >= 0) {
+      const remainSteps = routeSteps
+        .slice(activeStepIdx + 1)
+        .reduce((s, x) => s + x.distanceMeters, 0);
+      return distanceToTurn + remainSteps;
+    }
+    if (step === "inprogress" && captainPos) {
+      return haversineKm(captainPos, mapDrop) * 1000;
+    }
+    return null;
+  })();
+
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
