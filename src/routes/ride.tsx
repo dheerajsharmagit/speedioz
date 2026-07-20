@@ -544,7 +544,9 @@ function RidePage() {
           {step === "arriving" && ride && (
             <RideStatusStep
               title="Captain arriving"
-              subtitle={ride.captain_name ? `${ride.captain_name} is on the way` : "On the way"}
+              subtitle={`${etaMinutes ?? "—"} min · ${
+                distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
+              } to pickup${ride.captain_name ? ` · ${ride.captain_name}` : ""}`}
               ride={ride}
               onNext={simulateArrivalAtPickup}
               ctaLabel="Simulate pickup"
@@ -554,7 +556,11 @@ function RidePage() {
           {step === "inprogress" && ride && (
             <RideStatusStep
               title="On the way"
-              subtitle={`${etaMinutes ?? "—"} min to drop · ${Math.round(tripProgress * 100)}% complete${useSmartRoute ? " · saving 12 min" : ""}`}
+              subtitle={`${etaMinutes ?? "—"} min · ${
+                distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
+              } to drop · ${Math.round(tripProgress * 100)}% complete${
+                useSmartRoute ? " · saving 12 min" : ""
+              }`}
               ride={ride}
               onNext={simulateCompleted}
               ctaLabel="Simulate arrival"
