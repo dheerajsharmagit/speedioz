@@ -14,6 +14,8 @@ interface RideMapProps {
   captain?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
+  /** Any string that changes when we want the map to re-fit its bounds (e.g. UI step). */
+  fitKey?: string;
 }
 
 function nearestIndex(path: LatLng[], p: LatLng): number {
@@ -28,7 +30,7 @@ function nearestIndex(path: LatLng[], p: LatLng): number {
   return best;
 }
 
-export function RideMap({ pickup, drop, captain, polyline, className }: RideMapProps) {
+export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const pickupMarkerRef = useRef<GoogleMarker | null>(null);
@@ -106,25 +108,14 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update pickup / drop positions
+  // Decode polyline once per change and keep it for both drawing and bounds fitting.
+  const pathRef = useRef<LatLng[]>([]);
+
+  // Update pickup / drop positions (no fitting here — dedicated effect below).
   useEffect(() => {
     pickupMarkerRef.current?.setPosition(pickup);
     dropMarkerRef.current?.setPosition(drop);
-    const g = window.google;
-    if (mapRef.current && g) {
-      const same = pickup.lat === drop.lat && pickup.lng === drop.lng && !captain;
-      if (same) {
-        (mapRef.current as unknown as { setCenter: (p: LatLng) => void; setZoom: (z: number) => void }).setCenter(pickup);
-        (mapRef.current as unknown as { setCenter: (p: LatLng) => void; setZoom: (z: number) => void }).setZoom(15);
-      } else {
-        const bounds = new g.maps.LatLngBounds();
-        bounds.extend(pickup);
-        bounds.extend(drop);
-        if (captain) bounds.extend(captain);
-        mapRef.current.fitBounds(bounds, 60);
-      }
-    }
-  }, [pickup, drop, captain]);
+  }, [pickup, drop]);
 
   // Update polyline — split into traveled (behind captain) + remaining ahead
   useEffect(() => {
@@ -134,11 +125,13 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
     traveledRef.current?.setMap(null);
     polylineRef.current = null;
     traveledRef.current = null;
+    pathRef.current = [];
     if (!polyline) return;
 
     const decoded = g.maps.geometry.encoding.decodePath(polyline);
     if (!decoded || decoded.length === 0) return;
     const path: LatLng[] = decoded.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+    pathRef.current = path;
 
     const splitIdx = captain ? nearestIndex(path, captain) : 0;
     const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
@@ -161,6 +154,31 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
       map: mapRef.current,
     });
   }, [polyline, captain]);
+
+  // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
+  // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
+  useEffect(() => {
+    const g = window.google;
+    if (!mapRef.current || !g) return;
+    const map = mapRef.current as unknown as {
+      setCenter: (p: LatLng) => void;
+      setZoom: (z: number) => void;
+      fitBounds: (b: unknown, padding?: number | object) => void;
+    };
+    const same = pickup.lat === drop.lat && pickup.lng === drop.lng && !captain && pathRef.current.length === 0;
+    if (same) {
+      map.setCenter(pickup);
+      map.setZoom(15);
+      return;
+    }
+    const bounds = new g.maps.LatLngBounds();
+    bounds.extend(pickup);
+    bounds.extend(drop);
+    if (captain) bounds.extend(captain);
+    for (const pt of pathRef.current) bounds.extend(pt);
+    map.fitBounds(bounds, { top: 120, bottom: 80, left: 60, right: 60 } as unknown as number);
+  }, [pickup, drop, captain, polyline, fitKey]);
+
 
   // Update captain marker
   useEffect(() => {

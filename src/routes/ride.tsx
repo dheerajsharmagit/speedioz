@@ -365,6 +365,24 @@ function RidePage() {
     return Math.min(1, Math.max(0, passed / total));
   })();
 
+  // Live distance remaining — captain→pickup during pickup phase, captain→drop along route during trip.
+  const distanceRemainingM = (() => {
+    if ((step === "matched" || step === "arriving") && captainPos) {
+      return haversineKm(captainPos, mapPickup) * 1000;
+    }
+    if (step === "inprogress" && captainPos && routeSteps.length > 0 && activeStepIdx >= 0) {
+      const remainSteps = routeSteps
+        .slice(activeStepIdx + 1)
+        .reduce((s, x) => s + x.distanceMeters, 0);
+      return distanceToTurn + remainSteps;
+    }
+    if (step === "inprogress" && captainPos) {
+      return haversineKm(captainPos, mapDrop) * 1000;
+    }
+    return null;
+  })();
+
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -399,8 +417,10 @@ function RidePage() {
             drop={dest ? mapDrop : mapPickup}
             captain={captainPos}
             polyline={dest ? activePolyline : ""}
+            fitKey={step}
             className="h-full w-full"
           />
+
 
 
           <div className="pointer-events-none absolute left-6 right-6 top-6">
@@ -450,6 +470,11 @@ function RidePage() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
                 <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{etaLabel}</span>
                 <span className="text-sm font-extrabold">{etaMinutes} min</span>
+                {distanceRemainingM !== null && (
+                  <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
+                    · {formatMeters(distanceRemainingM)}
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -519,7 +544,9 @@ function RidePage() {
           {step === "arriving" && ride && (
             <RideStatusStep
               title="Captain arriving"
-              subtitle={ride.captain_name ? `${ride.captain_name} is on the way` : "On the way"}
+              subtitle={`${etaMinutes ?? "—"} min · ${
+                distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
+              } to pickup${ride.captain_name ? ` · ${ride.captain_name}` : ""}`}
               ride={ride}
               onNext={simulateArrivalAtPickup}
               ctaLabel="Simulate pickup"
@@ -529,7 +556,11 @@ function RidePage() {
           {step === "inprogress" && ride && (
             <RideStatusStep
               title="On the way"
-              subtitle={`${etaMinutes ?? "—"} min to drop · ${Math.round(tripProgress * 100)}% complete${useSmartRoute ? " · saving 12 min" : ""}`}
+              subtitle={`${etaMinutes ?? "—"} min · ${
+                distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
+              } to drop · ${Math.round(tripProgress * 100)}% complete${
+                useSmartRoute ? " · saving 12 min" : ""
+              }`}
               ride={ride}
               onNext={simulateCompleted}
               ctaLabel="Simulate arrival"
