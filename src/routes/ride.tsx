@@ -417,8 +417,10 @@ function RidePage() {
             drop={dest ? mapDrop : mapPickup}
             captain={captainPos}
             polyline={dest ? activePolyline : ""}
+            fitKey={step}
             className="h-full w-full"
           />
+
 
 
           <div className="pointer-events-none absolute left-6 right-6 top-6">
