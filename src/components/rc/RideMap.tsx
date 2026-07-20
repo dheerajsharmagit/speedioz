@@ -12,8 +12,20 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
-  polyline?: string; // encoded polyline
+  polyline?: string; // encoded polyline (full active route)
   className?: string;
+}
+
+function nearestIndex(path: LatLng[], p: LatLng): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < path.length; i++) {
+    const dx = path[i].lat - p.lat;
+    const dy = path[i].lng - p.lng;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 export function RideMap({ pickup, drop, captain, polyline, className }: RideMapProps) {
@@ -23,6 +35,7 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
   const dropMarkerRef = useRef<GoogleMarker | null>(null);
   const captainMarkerRef = useRef<GoogleMarker | null>(null);
   const polylineRef = useRef<GooglePolyline | null>(null);
+  const traveledRef = useRef<GooglePolyline | null>(null);
 
   // Init map once
   useEffect(() => {
@@ -87,6 +100,7 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
+      traveledRef.current?.setMap(null);
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,23 +126,41 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
     }
   }, [pickup, drop, captain]);
 
-  // Update polyline
+  // Update polyline — split into traveled (behind captain) + remaining ahead
   useEffect(() => {
     const g = window.google;
     if (!mapRef.current || !g) return;
     polylineRef.current?.setMap(null);
+    traveledRef.current?.setMap(null);
+    polylineRef.current = null;
+    traveledRef.current = null;
     if (!polyline) return;
 
-    const path = g.maps.geometry.encoding.decodePath(polyline);
-    if (!path) return;
+    const decoded = g.maps.geometry.encoding.decodePath(polyline);
+    if (!decoded || decoded.length === 0) return;
+    const path: LatLng[] = decoded.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+
+    const splitIdx = captain ? nearestIndex(path, captain) : 0;
+    const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
+    const remaining = path.slice(Math.max(0, splitIdx));
+
+    if (traveled.length > 1) {
+      traveledRef.current = new g.maps.Polyline({
+        path: traveled,
+        strokeColor: "#9ca3af",
+        strokeOpacity: 0.7,
+        strokeWeight: 4,
+        map: mapRef.current,
+      });
+    }
     polylineRef.current = new g.maps.Polyline({
-      path,
+      path: remaining,
       strokeColor: "#111827",
-      strokeOpacity: 0.9,
-      strokeWeight: 5,
+      strokeOpacity: 0.95,
+      strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline]);
+  }, [polyline, captain]);
 
   // Update captain marker
   useEffect(() => {
