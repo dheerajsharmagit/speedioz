@@ -12,8 +12,20 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
-  polyline?: string; // encoded polyline
+  polyline?: string; // encoded polyline (full active route)
   className?: string;
+}
+
+function nearestIndex(path: LatLng[], p: LatLng): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < path.length; i++) {
+    const dx = path[i].lat - p.lat;
+    const dy = path[i].lng - p.lng;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 export function RideMap({ pickup, drop, captain, polyline, className }: RideMapProps) {
