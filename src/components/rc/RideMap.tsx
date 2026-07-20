@@ -30,7 +30,7 @@ function nearestIndex(path: LatLng[], p: LatLng): number {
   return best;
 }
 
-export function RideMap({ pickup, drop, captain, polyline, className }: RideMapProps) {
+export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const pickupMarkerRef = useRef<GoogleMarker | null>(null);
