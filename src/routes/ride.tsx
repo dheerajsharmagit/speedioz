@@ -125,6 +125,7 @@ function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
+  const [pickupQuery, setPickupQuery] = useState("");
   const [locating, setLocating] = useState(true);
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
@@ -463,6 +464,22 @@ function RidePage() {
           {step === "destination" && (
             <DestinationStep
               pickup={pickup}
+              setPickup={(p) => { setPickup(p); setPickupQuery(p.label); }}
+              pickupQuery={pickupQuery}
+              setPickupQuery={setPickupQuery}
+              useCurrentLocation={() => {
+                if (typeof navigator === "undefined" || !navigator.geolocation) return;
+                setLocating(true);
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    setPickup({ label: "Current location", lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    setPickupQuery("");
+                    setLocating(false);
+                  },
+                  () => setLocating(false),
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+                );
+              }}
               locating={locating}
               dest={dest}
               setDest={setDest}
@@ -562,6 +579,10 @@ function StepIndicator({ step }: { step: UiStep }) {
 /* ---------- Destination ---------- */
 function DestinationStep({
   pickup,
+  setPickup,
+  pickupQuery,
+  setPickupQuery,
+  useCurrentLocation,
   locating,
   dest,
   setDest,
@@ -570,6 +591,10 @@ function DestinationStep({
   onNext,
 }: {
   pickup: Pickup;
+  setPickup: (p: Pickup) => void;
+  pickupQuery: string;
+  setPickupQuery: (v: string) => void;
+  useCurrentLocation: () => void;
   locating: boolean;
   dest: PlaceResult | null;
   setDest: (v: PlaceResult | null) => void;
@@ -577,18 +602,49 @@ function DestinationStep({
   setQuery: (v: string) => void;
   onNext: () => void;
 }) {
+  const [editPickup, setEditPickup] = useState(false);
   return (
     <>
       <div className="mb-3 px-6">
-        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Pickup
-        </p>
-        <div className="mt-1 flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
-          <span className="h-2 w-2 rounded-full bg-primary" />
-          <span className="text-sm font-semibold">
-            {locating ? "Locating you…" : pickup.label}
-          </span>
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Pickup
+          </p>
+          <button
+            onClick={() => setEditPickup((v) => !v)}
+            className="font-mono text-[10px] font-bold uppercase tracking-widest text-accent hover:underline"
+          >
+            {editPickup ? "Cancel" : "Change"}
+          </button>
         </div>
+        {!editPickup ? (
+          <div className="mt-1 flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
+            <span className="h-2 w-2 rounded-full bg-primary" />
+            <span className="flex-1 truncate text-sm font-semibold">
+              {locating ? "Locating you…" : pickup.label}
+            </span>
+          </div>
+        ) : (
+          <div className="mt-1 space-y-2">
+            <PlaceSearch
+              value={pickupQuery}
+              onChange={setPickupQuery}
+              onSelect={(p) => {
+                setPickup({ label: p.addr, lat: p.lat, lng: p.lng });
+                setPickupQuery(p.addr);
+                setEditPickup(false);
+              }}
+              placeholder="Search pickup location"
+              bias={{ lat: pickup.lat, lng: pickup.lng }}
+            />
+            <button
+              onClick={() => { useCurrentLocation(); setEditPickup(false); }}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background text-xs font-bold"
+            >
+              <span className="h-2 w-2 rounded-full bg-primary" /> Use current location
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="mb-6 px-6">

@@ -6,6 +6,7 @@ const roles = [
   { to: "/captain", label: "Captain" },
   { to: "/admin", label: "Admin" },
   { to: "/routes", label: "Community" },
+  { to: "/auth", label: "Sign in" },
 ] as const;
 
 export function RoleNav() {
