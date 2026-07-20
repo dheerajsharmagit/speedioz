@@ -470,6 +470,11 @@ function RidePage() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
                 <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{etaLabel}</span>
                 <span className="text-sm font-extrabold">{etaMinutes} min</span>
+                {distanceRemainingM !== null && (
+                  <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
+                    · {formatMeters(distanceRemainingM)}
+                  </span>
+                )}
               </div>
             </div>
           )}
