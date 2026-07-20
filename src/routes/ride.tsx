@@ -464,6 +464,22 @@ function RidePage() {
           {step === "destination" && (
             <DestinationStep
               pickup={pickup}
+              setPickup={(p) => { setPickup(p); setPickupQuery(p.label); }}
+              pickupQuery={pickupQuery}
+              setPickupQuery={setPickupQuery}
+              useCurrentLocation={() => {
+                if (typeof navigator === "undefined" || !navigator.geolocation) return;
+                setLocating(true);
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    setPickup({ label: "Current location", lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    setPickupQuery("");
+                    setLocating(false);
+                  },
+                  () => setLocating(false),
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+                );
+              }}
               locating={locating}
               dest={dest}
               setDest={setDest}
