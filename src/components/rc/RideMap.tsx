@@ -100,6 +100,7 @@ export function RideMap({ pickup, drop, captain, polyline, className }: RideMapP
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
+      traveledRef.current?.setMap(null);
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
