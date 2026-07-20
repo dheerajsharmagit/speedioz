@@ -125,6 +125,7 @@ function RidePage() {
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
+  const [pickupQuery, setPickupQuery] = useState("");
   const [locating, setLocating] = useState(true);
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
