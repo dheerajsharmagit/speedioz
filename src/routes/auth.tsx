@@ -3,18 +3,34 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 
+type Role = "rider" | "captain";
+const ROLE_KEY = "rc-pending-role";
+
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — RideConnect AI" },
-      { name: "description", content: "Sign in or create your RideConnect account with Google or email." },
+      { name: "description", content: "Sign in as a rider or captain with Google or email." },
     ],
   }),
   component: AuthPage,
 });
 
+function destFor(role: Role) {
+  return role === "captain" ? "/captain" : "/ride";
+}
+
+async function applyRole(role: Role) {
+  try {
+    await supabase.auth.updateUser({ data: { role } });
+  } catch (e) {
+    console.warn("updateUser role failed", e);
+  }
+}
+
 function AuthPage() {
   const navigate = useNavigate();
+  const [role, setRole] = useState<Role>("rider");
   const [mode, setMode] = useState<"signin" | "signup">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,10 +38,14 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user && !data.user.is_anonymous) {
-        navigate({ to: "/ride" });
-      }
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user || data.user.is_anonymous) return;
+      const existing = (data.user.user_metadata?.role as Role | undefined) ?? undefined;
+      const pending = (typeof window !== "undefined" ? window.localStorage.getItem(ROLE_KEY) : null) as Role | null;
+      const finalRole: Role = existing ?? pending ?? "rider";
+      if (!existing) await applyRole(finalRole);
+      if (pending) window.localStorage.removeItem(ROLE_KEY);
+      navigate({ to: destFor(finalRole) });
     });
   }, [navigate]);
 
@@ -33,8 +53,9 @@ function AuthPage() {
     setError(null);
     setLoading(true);
     try {
+      window.localStorage.setItem(ROLE_KEY, role);
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+        redirect_uri: window.location.origin + "/auth",
       });
       if (result.error) {
         setError(result.error.message ?? "Google sign-in failed");
@@ -42,7 +63,9 @@ function AuthPage() {
         return;
       }
       if (result.redirected) return;
-      navigate({ to: "/ride" });
+      await applyRole(role);
+      window.localStorage.removeItem(ROLE_KEY);
+      navigate({ to: destFor(role) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Google sign-in failed");
       setLoading(false);
@@ -58,14 +81,20 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin + "/auth",
+            data: { role },
+          },
         });
         if (error) throw error;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-      navigate({ to: "/ride" });
+      const { data } = await supabase.auth.getUser();
+      const stored = (data.user?.user_metadata?.role as Role | undefined) ?? role;
+      if (!data.user?.user_metadata?.role) await applyRole(role);
+      navigate({ to: destFor(stored) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Authentication failed");
     } finally {
@@ -88,16 +117,31 @@ function AuthPage() {
             {mode === "signup" ? "Ride smarter." : "Sign in."}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            {mode === "signup"
-              ? "Save your trips, tips, and community routes."
-              : "Continue where you left off."}
+            Choose how you want to use RideConnect.
           </p>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
+          {(["rider", "captain"] as const).map((r) => {
+            const active = role === r;
+            return (
+              <button
+                key={r}
+                onClick={() => setRole(r)}
+                className={`h-12 rounded-xl font-mono text-[11px] font-bold uppercase tracking-widest transition ${
+                  active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                {r === "rider" ? "I'm a Customer" : "I'm a Captain"}
+              </button>
+            );
+          })}
         </div>
 
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="mt-10 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
+          className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
         >
           <GoogleGlyph />
           Continue with Google
@@ -137,7 +181,9 @@ function AuthPage() {
             disabled={loading}
             className="h-14 w-full rounded-2xl bg-secondary text-sm font-bold text-secondary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
           >
-            {loading ? "…" : mode === "signup" ? "Create account" : "Sign in"}
+            {loading ? "…" : mode === "signup"
+              ? role === "captain" ? "Create captain account" : "Create customer account"
+              : role === "captain" ? "Sign in as captain" : "Sign in as customer"}
           </button>
         </form>
 
