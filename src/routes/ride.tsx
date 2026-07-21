@@ -127,6 +127,9 @@ function RidePage() {
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
   const [pickupQuery, setPickupQuery] = useState("");
   const [locating, setLocating] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoError, setGeoError] = useState<null | "denied" | "unavailable" | "timeout">(null);
+  const [recenterKey, setRecenterKey] = useState(0);
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("upi");
@@ -142,32 +145,67 @@ function RidePage() {
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
   const approachFetchedRef = useRef<string | null>(null);
+  const firstFixRef = useRef(false);
+
+  function requestGeolocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoError("unavailable");
+      setLocating(false);
+      return;
+    }
+    setGeoError(null);
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(p);
+        setPickup({ label: "Current location", ...p });
+        firstFixRef.current = true;
+        setLocating(false);
+      },
+      (err) => {
+        const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
+        setGeoError(code);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
 
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPickup({
-            label: "Current location",
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-          setLocating(false);
-        },
-        (err) => {
-          console.warn("geolocation failed", err);
-          setPickup((prev) => ({ ...prev, label: "Location unavailable — using city center" }));
-          setLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-      );
-    } else {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoError("unavailable");
       setLocating(false);
+      return;
     }
+
+    requestGeolocation();
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(p);
+        setGeoError(null);
+        if (!firstFixRef.current) {
+          setPickup({ label: "Current location", ...p });
+          firstFixRef.current = true;
+          setLocating(false);
+        }
+      },
+      (err) => {
+        const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
+        setGeoError(code);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+    );
+    return () => { navigator.geolocation.clearWatch(watchId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
 
 
