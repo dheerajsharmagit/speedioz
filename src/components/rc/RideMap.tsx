@@ -12,10 +12,14 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
+  userLocation?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
   /** Any string that changes when we want the map to re-fit its bounds (e.g. UI step). */
   fitKey?: string;
+  /** Bump this number to smoothly pan the map to `recenterTarget`. */
+  recenterKey?: number;
+  recenterTarget?: LatLng | null;
 }
 
 function nearestIndex(path: LatLng[], p: LatLng): number {
