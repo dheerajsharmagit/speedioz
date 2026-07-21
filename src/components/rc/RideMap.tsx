@@ -211,9 +211,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z",
           scale: 1.4,
-          fillColor: "#22c55e",
+          fillColor: markersRef.current.captainFill,
           fillOpacity: 1,
-          strokeColor: "#052e16",
+          strokeColor: markersRef.current.captainStroke,
           strokeWeight: 2,
           rotation: 0,
         },
