@@ -418,7 +418,7 @@ function RidePage() {
             captain={captainPos}
             polyline={dest ? activePolyline : ""}
             fitKey={step}
-            className="h-full w-full"
+            className="absolute inset-0"
           />
 
 
