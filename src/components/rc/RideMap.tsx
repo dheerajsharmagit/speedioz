@@ -179,7 +179,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
     if (captain) bounds.extend(captain);
     for (const pt of pathRef.current) bounds.extend(pt);
     map.fitBounds(bounds, { top: 120, bottom: 80, left: 60, right: 60 } as unknown as number);
-  }, [pickup, drop, captain, polyline, fitKey]);
+  }, [pickup, drop, captain, polyline, fitKey, mapReady]);
 
 
   // Update captain marker
