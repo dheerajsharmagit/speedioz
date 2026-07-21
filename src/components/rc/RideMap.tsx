@@ -46,6 +46,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   const polylineRef = useRef<GooglePolyline | null>(null);
   const traveledRef = useRef<GooglePolyline | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const { markers, version } = useTheme();
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
 
   // Init map once
   useEffect(() => {
