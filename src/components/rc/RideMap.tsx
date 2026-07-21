@@ -318,5 +318,25 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recenterKey]);
 
-  return <div ref={containerRef} className={className ?? "h-full w-full"} />;
+  return (
+    <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
+      <div ref={containerRef} className="absolute inset-0 bg-muted" />
+      {loadError && (
+        <div className="absolute inset-0 grid place-items-center bg-muted p-6 text-center">
+          <div className="max-w-xs">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-destructive">Map unavailable</p>
+            <p className="mt-2 text-sm font-semibold">We couldn&apos;t load the map right now.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Check your connection and refresh. You can still set pickup and drop below.</p>
+            <button
+              onClick={() => { setLoadError(null); location.reload(); }}
+              className="mt-4 rounded-full bg-primary px-4 py-2 text-xs font-bold text-secondary"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
+
