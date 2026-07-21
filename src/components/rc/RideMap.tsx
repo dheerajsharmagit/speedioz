@@ -155,7 +155,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline, captain]);
+  }, [polyline, captain, mapReady]);
 
   // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
   // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
