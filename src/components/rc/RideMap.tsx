@@ -50,6 +50,8 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   const traveledRef = useRef<GooglePolyline | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
+
   const { markers, version } = useTheme();
   const markersRef = useRef(markers);
   markersRef.current = markers;
