@@ -339,7 +339,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         <div className="pointer-events-auto absolute right-2 top-2 flex items-center gap-2 rounded-full bg-background/95 px-3 py-1.5 text-[11px] shadow-md">
           <span className="text-muted-foreground">Using backup map</span>
           <button
-            onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); }}
+            onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); setRetryTick((n) => n + 1); }}
             className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-secondary"
           >
             Retry
