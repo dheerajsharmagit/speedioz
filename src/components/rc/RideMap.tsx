@@ -109,6 +109,8 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
+      userMarkerRef.current?.setMap(null);
+      userAccuracyRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
       traveledRef.current?.setMap(null);
       mapRef.current = null;
