@@ -6,6 +6,7 @@ import {
   loadGoogleMaps,
 } from "@/lib/google-maps-loader";
 import { computeRoute } from "@/lib/routes.functions";
+import { useTheme } from "@/lib/theme";
 
 interface Props {
   from: { lat: number; lng: number };
