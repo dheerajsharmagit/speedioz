@@ -56,11 +56,13 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const g = await loadGoogleMaps().catch((e) => {
-        console.error(e);
+      const g = await loadGoogleMaps().catch((e: unknown) => {
+        console.error("Google Maps failed to load", e);
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Map failed to load");
         return null;
       });
       if (cancelled || !g || !containerRef.current) return;
+
 
       mapRef.current = new g.maps.Map(containerRef.current, {
         center: pickup,
