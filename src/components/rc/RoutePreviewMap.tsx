@@ -99,7 +99,7 @@ export function RoutePreviewMap({ from, to, className }: Props) {
       poly?.setMap(null);
       map = null;
     };
-  }, [from.lat, from.lng, to.lat, to.lng]);
+  }, [from.lat, from.lng, to.lat, to.lng, markers]);
 
   if (error) {
     return <div className={`${className ?? ""} grid place-items-center bg-muted text-[10px] font-mono uppercase text-muted-foreground`}>Map unavailable</div>;
