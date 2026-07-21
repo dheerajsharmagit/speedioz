@@ -5,6 +5,7 @@ import {
   type GooglePolyline,
   loadGoogleMaps,
 } from "@/lib/google-maps-loader";
+import { useTheme } from "@/lib/theme";
 
 type LatLng = { lat: number; lng: number };
 
