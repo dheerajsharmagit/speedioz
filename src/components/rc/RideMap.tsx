@@ -219,5 +219,65 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
     }
   }, [captain]);
 
+  // User's live location marker (blue dot).
+  useEffect(() => {
+    const g = window.google;
+    if (!mapRef.current || !g) return;
+    if (!userLocation) {
+      userMarkerRef.current?.setMap(null);
+      userMarkerRef.current = null;
+      userAccuracyRef.current?.setMap(null);
+      userAccuracyRef.current = null;
+      return;
+    }
+    if (!userAccuracyRef.current) {
+      userAccuracyRef.current = new g.maps.Marker({
+        position: userLocation,
+        map: mapRef.current,
+        clickable: false,
+        zIndex: 5,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 22,
+          fillColor: "#3b82f6",
+          fillOpacity: 0.15,
+          strokeColor: "#3b82f6",
+          strokeOpacity: 0.25,
+          strokeWeight: 1,
+        },
+      });
+    } else {
+      userAccuracyRef.current.setPosition(userLocation);
+    }
+    if (!userMarkerRef.current) {
+      userMarkerRef.current = new g.maps.Marker({
+        position: userLocation,
+        map: mapRef.current,
+        title: "Your location",
+        zIndex: 6,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+    } else {
+      userMarkerRef.current.setPosition(userLocation);
+    }
+  }, [userLocation, mapReady]);
+
+  // Smooth recenter when parent bumps recenterKey.
+  useEffect(() => {
+    if (recenterKey === undefined) return;
+    if (!mapRef.current || !recenterTarget) return;
+    mapRef.current.panTo(recenterTarget);
+    const z = mapRef.current.getZoom?.();
+    if (typeof z === "number" && z < 15) mapRef.current.setZoom(16);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recenterKey]);
+
   return <div ref={containerRef} className={className ?? "h-full w-full"} />;
 }
