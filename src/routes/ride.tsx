@@ -454,10 +454,63 @@ function RidePage() {
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
             captain={captainPos}
+            userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
             fitKey={step}
+            recenterKey={recenterKey}
+            recenterTarget={userLocation ?? mapPickup}
             className="absolute inset-0"
           />
+
+          {/* Recenter button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (userLocation) {
+                setRecenterKey((k) => k + 1);
+              } else {
+                requestGeolocation();
+              }
+            }}
+            aria-label="Recenter map on my location"
+            className="absolute right-4 top-24 grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            </svg>
+          </button>
+
+          {/* Geolocation error banner */}
+          {geoError && (
+            <div className="absolute inset-x-4 bottom-20 rounded-2xl bg-secondary/95 p-3 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-primary">
+                {geoError === "denied" ? "Location blocked" : geoError === "timeout" ? "Location timed out" : "Location unavailable"}
+              </p>
+              <p className="mt-1 text-xs font-semibold">
+                {geoError === "denied"
+                  ? "Enable location access in your browser settings, or set pickup manually below."
+                  : geoError === "timeout"
+                    ? "We couldn't get your location in time. Retry or pick a pickup manually."
+                    : "Your device didn't share a location. Retry or pick a pickup manually."}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={requestGeolocation}
+                  className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-secondary"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => setGeoError(null)}
+                  className="rounded-full border border-white/20 px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
 
 
 
