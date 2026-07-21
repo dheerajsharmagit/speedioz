@@ -96,6 +96,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       bounds.extend(pickup);
       bounds.extend(drop);
       mapRef.current.fitBounds(bounds, 60);
+      setMapReady(true);
     })();
     return () => {
       cancelled = true;
