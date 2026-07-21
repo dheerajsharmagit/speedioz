@@ -70,7 +70,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "RideConnect AI — Ride Smarter. Reach Faster." },
       { name: "description", content: "Bike & auto ride booking powered by community-verified smart routes. Save 12 min on average." },
       { name: "author", content: "RideConnect AI" },
-      { name: "theme-color", content: "#FFD400" },
+      { name: "theme-color", content: "#EC4899" },
       { property: "og:title", content: "RideConnect AI — Ride Smarter. Reach Faster." },
       { property: "og:description", content: "Bike & auto ride booking powered by community-verified smart routes. Save 12 min on average." },
       { property: "og:type", content: "website" },
