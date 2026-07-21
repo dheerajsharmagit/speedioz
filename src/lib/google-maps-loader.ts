@@ -3,7 +3,12 @@
 
 export type LatLngLiteral = { lat: number; lng: number };
 export type GoogleLatLng = { lat: () => number; lng: () => number };
-export type GoogleMap = { fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void };
+export type GoogleMap = {
+  fitBounds: (bounds: GoogleLatLngBounds, padding?: number) => void;
+  panTo: (position: LatLngLiteral) => void;
+  setZoom: (zoom: number) => void;
+  getZoom: () => number | undefined;
+};
 export type GoogleMarker = {
   setMap: (map: GoogleMap | null) => void;
   setPosition: (position: LatLngLiteral) => void;
