@@ -12,6 +12,7 @@ export type GoogleMap = {
 export type GoogleMarker = {
   setMap: (map: GoogleMap | null) => void;
   setPosition: (position: LatLngLiteral) => void;
+  setIcon: (icon: Record<string, unknown>) => void;
 };
 export type GooglePolyline = { setMap: (map: GoogleMap | null) => void };
 export type GoogleLatLngBounds = { extend: (point: LatLngLiteral | GoogleLatLng) => void };
