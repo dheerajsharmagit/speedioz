@@ -50,12 +50,12 @@ export function RoutePreviewMap({ from, to, className }: Props) {
         new g.maps.Marker({
           position: from,
           map,
-          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: "#EC4899", fillOpacity: 1, strokeColor: "#111827", strokeWeight: 1.5 },
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: markers.pickupFill, fillOpacity: 1, strokeColor: markers.pickupStroke, strokeWeight: 1.5 },
         });
         new g.maps.Marker({
           position: to,
           map,
-          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: "#111827", fillOpacity: 1, strokeColor: "#EC4899", strokeWeight: 1.5 },
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: markers.dropFill, fillOpacity: 1, strokeColor: markers.dropStroke, strokeWeight: 1.5 },
         });
 
         const cacheKey = `${from.lat},${from.lng}->${to.lat},${to.lng}`;
@@ -74,7 +74,7 @@ export function RoutePreviewMap({ from, to, className }: Props) {
           const path = g.maps.geometry.encoding.decodePath(encoded);
           poly = new g.maps.Polyline({
             path,
-            strokeColor: "#111827",
+            strokeColor: markers.routeStroke,
             strokeOpacity: 0.9,
             strokeWeight: 3,
             map,
