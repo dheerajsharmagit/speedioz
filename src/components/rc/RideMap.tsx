@@ -154,20 +154,20 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
     if (traveled.length > 1) {
       traveledRef.current = new g.maps.Polyline({
         path: traveled,
-        strokeColor: "#9ca3af",
-        strokeOpacity: 0.7,
+        strokeColor: markersRef.current.routeTraveled,
+        strokeOpacity: 0.75,
         strokeWeight: 4,
         map: mapRef.current,
       });
     }
     polylineRef.current = new g.maps.Polyline({
       path: remaining,
-      strokeColor: "#111827",
+      strokeColor: markersRef.current.routeStroke,
       strokeOpacity: 0.95,
       strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline, captain, mapReady]);
+  }, [polyline, captain, mapReady, version]);
 
   // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
   // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
