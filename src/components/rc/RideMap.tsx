@@ -129,7 +129,8 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [retryTick]);
+
 
   // Decode polyline once per change and keep it for both drawing and bounds fitting.
   const pathRef = useRef<LatLng[]>([]);
