@@ -19,6 +19,7 @@ const cache = new Map<string, string>();
 export function RoutePreviewMap({ from, to, className }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState(false);
+  const { markers } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
