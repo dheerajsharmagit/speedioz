@@ -481,35 +481,28 @@ function RidePage() {
             </svg>
           </button>
 
-          {/* Geolocation error banner */}
+          {/* Geolocation error banner — compact, top-anchored so it doesn't cover the map */}
           {geoError && (
-            <div className="absolute inset-x-4 bottom-20 rounded-2xl bg-secondary/95 p-3 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-primary">
-                {geoError === "denied" ? "Location blocked" : geoError === "timeout" ? "Location timed out" : "Location unavailable"}
-              </p>
-              <p className="mt-1 text-xs font-semibold">
-                {geoError === "denied"
-                  ? "Enable location access in your browser settings, or set pickup manually below."
-                  : geoError === "timeout"
-                    ? "We couldn't get your location in time. Retry or pick a pickup manually."
-                    : "Your device didn't share a location. Retry or pick a pickup manually."}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  onClick={requestGeolocation}
-                  className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-secondary"
-                >
-                  Retry
-                </button>
-                <button
-                  onClick={() => setGeoError(null)}
-                  className="rounded-full border border-white/20 px-3 py-1.5 text-[11px] font-bold"
-                >
-                  Dismiss
-                </button>
-              </div>
+            <div className="absolute inset-x-4 top-4 flex items-center gap-2 rounded-full bg-secondary/95 px-3 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+              <span className="text-xs font-semibold truncate">
+                {geoError === "denied" ? "Location off — set pickup manually" : geoError === "timeout" ? "Location timed out" : "Location unavailable"}
+              </span>
+              <button
+                onClick={requestGeolocation}
+                className="ml-auto shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-secondary"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => setGeoError(null)}
+                aria-label="Dismiss"
+                className="shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-bold"
+              >
+                ✕
+              </button>
             </div>
           )}
+
 
 
 
