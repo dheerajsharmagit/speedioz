@@ -5,6 +5,7 @@ import {
   type GooglePolyline,
   loadGoogleMaps,
 } from "@/lib/google-maps-loader";
+import { useTheme } from "@/lib/theme";
 
 type LatLng = { lat: number; lng: number };
 
@@ -45,6 +46,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   const polylineRef = useRef<GooglePolyline | null>(null);
   const traveledRef = useRef<GooglePolyline | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const { markers, version } = useTheme();
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
 
   // Init map once
   useEffect(() => {
@@ -76,9 +80,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 9,
-          fillColor: "#EC4899",
+          fillColor: markersRef.current.pickupFill,
           fillOpacity: 1,
-          strokeColor: "#111827",
+          strokeColor: markersRef.current.pickupStroke,
           strokeWeight: 2,
         },
       });
@@ -90,9 +94,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 9,
-          fillColor: "#111827",
+          fillColor: markersRef.current.dropFill,
           fillOpacity: 1,
-          strokeColor: "#EC4899",
+          strokeColor: markersRef.current.dropStroke,
           strokeWeight: 2,
         },
       });
@@ -150,20 +154,20 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
     if (traveled.length > 1) {
       traveledRef.current = new g.maps.Polyline({
         path: traveled,
-        strokeColor: "#9ca3af",
-        strokeOpacity: 0.7,
+        strokeColor: markersRef.current.routeTraveled,
+        strokeOpacity: 0.75,
         strokeWeight: 4,
         map: mapRef.current,
       });
     }
     polylineRef.current = new g.maps.Polyline({
       path: remaining,
-      strokeColor: "#111827",
+      strokeColor: markersRef.current.routeStroke,
       strokeOpacity: 0.95,
       strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline, captain, mapReady]);
+  }, [polyline, captain, mapReady, version]);
 
   // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
   // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
@@ -207,9 +211,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z",
           scale: 1.4,
-          fillColor: "#22c55e",
+          fillColor: markersRef.current.captainFill,
           fillOpacity: 1,
-          strokeColor: "#052e16",
+          strokeColor: markersRef.current.captainStroke,
           strokeWeight: 2,
           rotation: 0,
         },
@@ -239,9 +243,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 22,
-          fillColor: "#3b82f6",
+          fillColor: markersRef.current.userFill,
           fillOpacity: 0.15,
-          strokeColor: "#3b82f6",
+          strokeColor: markersRef.current.userFill,
           strokeOpacity: 0.25,
           strokeWeight: 1,
         },
@@ -258,7 +262,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: "#3b82f6",
+          fillColor: markersRef.current.userFill,
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,
@@ -268,6 +272,37 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       userMarkerRef.current.setPosition(userLocation);
     }
   }, [userLocation, mapReady]);
+
+  // Re-apply marker icons when theme (mode/intensity) changes.
+  useEffect(() => {
+    const g = window.google;
+    if (!g || !mapReady) return;
+    pickupMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 9,
+      fillColor: markers.pickupFill, fillOpacity: 1,
+      strokeColor: markers.pickupStroke, strokeWeight: 2,
+    });
+    dropMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 9,
+      fillColor: markers.dropFill, fillOpacity: 1,
+      strokeColor: markers.dropStroke, strokeWeight: 2,
+    });
+    captainMarkerRef.current?.setIcon({
+      path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z", scale: 1.4,
+      fillColor: markers.captainFill, fillOpacity: 1,
+      strokeColor: markers.captainStroke, strokeWeight: 2, rotation: 0,
+    });
+    userMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 7,
+      fillColor: markers.userFill, fillOpacity: 1,
+      strokeColor: "#ffffff", strokeWeight: 2,
+    });
+    userAccuracyRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 22,
+      fillColor: markers.userFill, fillOpacity: 0.15,
+      strokeColor: markers.userFill, strokeOpacity: 0.25, strokeWeight: 1,
+    });
+  }, [markers, mapReady]);
 
   // Smooth recenter when parent bumps recenterKey.
   useEffect(() => {
