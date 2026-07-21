@@ -243,9 +243,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 22,
-          fillColor: "#3b82f6",
+          fillColor: markersRef.current.userFill,
           fillOpacity: 0.15,
-          strokeColor: "#3b82f6",
+          strokeColor: markersRef.current.userFill,
           strokeOpacity: 0.25,
           strokeWeight: 1,
         },
@@ -262,7 +262,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: "#3b82f6",
+          fillColor: markersRef.current.userFill,
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,
@@ -272,6 +272,37 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       userMarkerRef.current.setPosition(userLocation);
     }
   }, [userLocation, mapReady]);
+
+  // Re-apply marker icons when theme (mode/intensity) changes.
+  useEffect(() => {
+    const g = window.google;
+    if (!g || !mapReady) return;
+    pickupMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 9,
+      fillColor: markers.pickupFill, fillOpacity: 1,
+      strokeColor: markers.pickupStroke, strokeWeight: 2,
+    });
+    dropMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 9,
+      fillColor: markers.dropFill, fillOpacity: 1,
+      strokeColor: markers.dropStroke, strokeWeight: 2,
+    });
+    captainMarkerRef.current?.setIcon({
+      path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z", scale: 1.4,
+      fillColor: markers.captainFill, fillOpacity: 1,
+      strokeColor: markers.captainStroke, strokeWeight: 2, rotation: 0,
+    });
+    userMarkerRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 7,
+      fillColor: markers.userFill, fillOpacity: 1,
+      strokeColor: "#ffffff", strokeWeight: 2,
+    });
+    userAccuracyRef.current?.setIcon({
+      path: g.maps.SymbolPath.CIRCLE, scale: 22,
+      fillColor: markers.userFill, fillOpacity: 0.15,
+      strokeColor: markers.userFill, strokeOpacity: 0.25, strokeWeight: 1,
+    });
+  }, [markers, mapReady]);
 
   // Smooth recenter when parent bumps recenterKey.
   useEffect(() => {
