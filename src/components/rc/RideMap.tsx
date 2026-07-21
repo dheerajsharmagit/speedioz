@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type GoogleMap,
   type GoogleMarker,
@@ -38,6 +38,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
   const captainMarkerRef = useRef<GoogleMarker | null>(null);
   const polylineRef = useRef<GooglePolyline | null>(null);
   const traveledRef = useRef<GooglePolyline | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // Init map once
   useEffect(() => {
@@ -95,6 +96,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       bounds.extend(pickup);
       bounds.extend(drop);
       mapRef.current.fitBounds(bounds, 60);
+      setMapReady(true);
     })();
     return () => {
       cancelled = true;
@@ -153,7 +155,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline, captain]);
+  }, [polyline, captain, mapReady]);
 
   // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
   // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
@@ -177,7 +179,7 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
     if (captain) bounds.extend(captain);
     for (const pt of pathRef.current) bounds.extend(pt);
     map.fitBounds(bounds, { top: 120, bottom: 80, left: 60, right: 60 } as unknown as number);
-  }, [pickup, drop, captain, polyline, fitKey]);
+  }, [pickup, drop, captain, polyline, fitKey, mapReady]);
 
 
   // Update captain marker
