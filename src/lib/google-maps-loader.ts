@@ -35,12 +35,56 @@ export type GoogleMapsApi = {
 };
 
 let loaderPromise: Promise<GoogleMapsApi> | null = null;
+let attemptCount = 0;
+const MAX_ATTEMPTS = 3;
 
 declare global {
   interface Window {
     __rcInitGoogleMaps?: () => void;
     google?: GoogleMapsApi;
   }
+}
+
+function attemptLoad(): Promise<GoogleMapsApi> {
+  const browserKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined;
+  const trackingId = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID as string | undefined;
+  if (!browserKey) return Promise.reject(new Error("Google Maps browser key is missing"));
+
+  return new Promise((resolve, reject) => {
+    const timeoutMs = 12000;
+    let done = false;
+    const timer = window.setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error("Google Maps load timed out"));
+    }, timeoutMs);
+
+    window.__rcInitGoogleMaps = () => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      if (window.google?.maps) resolve(window.google);
+      else reject(new Error("Google Maps failed to initialise"));
+    };
+    const script = document.createElement("script");
+    const channel = trackingId ? `&channel=${encodeURIComponent(trackingId)}` : "";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(browserKey)}&loading=async&libraries=geometry,places&callback=__rcInitGoogleMaps${channel}`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      script.remove();
+      reject(new Error("Google Maps script failed to load"));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+export function resetGoogleMapsLoader(): void {
+  loaderPromise = null;
+  attemptCount = 0;
 }
 
 export function loadGoogleMaps(): Promise<GoogleMapsApi> {
@@ -50,25 +94,25 @@ export function loadGoogleMaps(): Promise<GoogleMapsApi> {
   if (window.google?.maps) return Promise.resolve(window.google);
   if (loaderPromise) return loaderPromise;
 
-  const browserKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined;
-  const trackingId = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID as string | undefined;
-  if (!browserKey) {
-    return Promise.reject(new Error("Google Maps browser key is missing"));
-  }
-
-  loaderPromise = new Promise((resolve, reject) => {
-    window.__rcInitGoogleMaps = () => {
-      if (window.google?.maps) resolve(window.google);
-      else reject(new Error("Google Maps failed to initialise"));
-    };
-    const script = document.createElement("script");
-    const channel = trackingId ? `&channel=${encodeURIComponent(trackingId)}` : "";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(browserKey)}&loading=async&libraries=geometry,places&callback=__rcInitGoogleMaps${channel}`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => reject(new Error("Google Maps script failed to load"));
-    document.head.appendChild(script);
-  });
+  loaderPromise = (async () => {
+    let lastErr: unknown = null;
+    while (attemptCount < MAX_ATTEMPTS) {
+      attemptCount++;
+      try {
+        const g = await attemptLoad();
+        return g;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`Google Maps load attempt ${attemptCount} failed`, e);
+        if (attemptCount < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 800 * attemptCount));
+        }
+      }
+    }
+    loaderPromise = null; // allow future retry via reset
+    throw lastErr instanceof Error ? lastErr : new Error("Google Maps failed to load");
+  })();
 
   return loaderPromise;
 }
+
