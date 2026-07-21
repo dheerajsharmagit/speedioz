@@ -80,9 +80,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 9,
-          fillColor: "#EC4899",
+          fillColor: markersRef.current.pickupFill,
           fillOpacity: 1,
-          strokeColor: "#111827",
+          strokeColor: markersRef.current.pickupStroke,
           strokeWeight: 2,
         },
       });
@@ -94,9 +94,9 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 9,
-          fillColor: "#111827",
+          fillColor: markersRef.current.dropFill,
           fillOpacity: 1,
-          strokeColor: "#EC4899",
+          strokeColor: markersRef.current.dropStroke,
           strokeWeight: 2,
         },
       });
