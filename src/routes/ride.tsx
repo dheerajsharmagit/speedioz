@@ -127,6 +127,9 @@ function RidePage() {
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
   const [pickupQuery, setPickupQuery] = useState("");
   const [locating, setLocating] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoError, setGeoError] = useState<null | "denied" | "unavailable" | "timeout">(null);
+  const [recenterKey, setRecenterKey] = useState(0);
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("upi");
@@ -142,32 +145,67 @@ function RidePage() {
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
   const approachFetchedRef = useRef<string | null>(null);
+  const firstFixRef = useRef(false);
+
+  function requestGeolocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoError("unavailable");
+      setLocating(false);
+      return;
+    }
+    setGeoError(null);
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(p);
+        setPickup({ label: "Current location", ...p });
+        firstFixRef.current = true;
+        setLocating(false);
+      },
+      (err) => {
+        const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
+        setGeoError(code);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
 
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPickup({
-            label: "Current location",
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-          setLocating(false);
-        },
-        (err) => {
-          console.warn("geolocation failed", err);
-          setPickup((prev) => ({ ...prev, label: "Location unavailable — using city center" }));
-          setLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-      );
-    } else {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoError("unavailable");
       setLocating(false);
+      return;
     }
+
+    requestGeolocation();
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(p);
+        setGeoError(null);
+        if (!firstFixRef.current) {
+          setPickup({ label: "Current location", ...p });
+          firstFixRef.current = true;
+          setLocating(false);
+        }
+      },
+      (err) => {
+        const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
+        setGeoError(code);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+    );
+    return () => { navigator.geolocation.clearWatch(watchId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
 
 
@@ -416,10 +454,63 @@ function RidePage() {
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
             captain={captainPos}
+            userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
             fitKey={step}
+            recenterKey={recenterKey}
+            recenterTarget={userLocation ?? mapPickup}
             className="absolute inset-0"
           />
+
+          {/* Recenter button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (userLocation) {
+                setRecenterKey((k) => k + 1);
+              } else {
+                requestGeolocation();
+              }
+            }}
+            aria-label="Recenter map on my location"
+            className="absolute right-4 top-24 grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            </svg>
+          </button>
+
+          {/* Geolocation error banner */}
+          {geoError && (
+            <div className="absolute inset-x-4 bottom-20 rounded-2xl bg-secondary/95 p-3 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-primary">
+                {geoError === "denied" ? "Location blocked" : geoError === "timeout" ? "Location timed out" : "Location unavailable"}
+              </p>
+              <p className="mt-1 text-xs font-semibold">
+                {geoError === "denied"
+                  ? "Enable location access in your browser settings, or set pickup manually below."
+                  : geoError === "timeout"
+                    ? "We couldn't get your location in time. Retry or pick a pickup manually."
+                    : "Your device didn't share a location. Retry or pick a pickup manually."}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={requestGeolocation}
+                  className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-secondary"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => setGeoError(null)}
+                  className="rounded-full border border-white/20 px-3 py-1.5 text-[11px] font-bold"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
 
 
 

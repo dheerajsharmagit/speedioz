@@ -12,10 +12,14 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
+  userLocation?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
   /** Any string that changes when we want the map to re-fit its bounds (e.g. UI step). */
   fitKey?: string;
+  /** Bump this number to smoothly pan the map to `recenterTarget`. */
+  recenterKey?: number;
+  recenterTarget?: LatLng | null;
 }
 
 function nearestIndex(path: LatLng[], p: LatLng): number {
@@ -30,12 +34,14 @@ function nearestIndex(path: LatLng[], p: LatLng): number {
   return best;
 }
 
-export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: RideMapProps) {
+export function RideMap({ pickup, drop, captain, userLocation, polyline, className, fitKey, recenterKey, recenterTarget }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const pickupMarkerRef = useRef<GoogleMarker | null>(null);
   const dropMarkerRef = useRef<GoogleMarker | null>(null);
   const captainMarkerRef = useRef<GoogleMarker | null>(null);
+  const userMarkerRef = useRef<GoogleMarker | null>(null);
+  const userAccuracyRef = useRef<GoogleMarker | null>(null);
   const polylineRef = useRef<GooglePolyline | null>(null);
   const traveledRef = useRef<GooglePolyline | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -103,6 +109,8 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
+      userMarkerRef.current?.setMap(null);
+      userAccuracyRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
       traveledRef.current?.setMap(null);
       mapRef.current = null;
@@ -210,6 +218,66 @@ export function RideMap({ pickup, drop, captain, polyline, className, fitKey }: 
       captainMarkerRef.current.setPosition(captain);
     }
   }, [captain]);
+
+  // User's live location marker (blue dot).
+  useEffect(() => {
+    const g = window.google;
+    if (!mapRef.current || !g) return;
+    if (!userLocation) {
+      userMarkerRef.current?.setMap(null);
+      userMarkerRef.current = null;
+      userAccuracyRef.current?.setMap(null);
+      userAccuracyRef.current = null;
+      return;
+    }
+    if (!userAccuracyRef.current) {
+      userAccuracyRef.current = new g.maps.Marker({
+        position: userLocation,
+        map: mapRef.current,
+        clickable: false,
+        zIndex: 5,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 22,
+          fillColor: "#3b82f6",
+          fillOpacity: 0.15,
+          strokeColor: "#3b82f6",
+          strokeOpacity: 0.25,
+          strokeWeight: 1,
+        },
+      });
+    } else {
+      userAccuracyRef.current.setPosition(userLocation);
+    }
+    if (!userMarkerRef.current) {
+      userMarkerRef.current = new g.maps.Marker({
+        position: userLocation,
+        map: mapRef.current,
+        title: "Your location",
+        zIndex: 6,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+    } else {
+      userMarkerRef.current.setPosition(userLocation);
+    }
+  }, [userLocation, mapReady]);
+
+  // Smooth recenter when parent bumps recenterKey.
+  useEffect(() => {
+    if (recenterKey === undefined) return;
+    if (!mapRef.current || !recenterTarget) return;
+    mapRef.current.panTo(recenterTarget);
+    const z = mapRef.current.getZoom?.();
+    if (typeof z === "number" && z < 15) mapRef.current.setZoom(16);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recenterKey]);
 
   return <div ref={containerRef} className={className ?? "h-full w-full"} />;
 }
