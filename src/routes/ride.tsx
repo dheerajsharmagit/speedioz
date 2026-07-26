@@ -579,7 +579,7 @@ function RidePage() {
             ) : (
               <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
                 <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-                <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
+                <p className="mt-1 text-xs font-semibold">{locating ? "Locating you…" : pickup.label}</p>
                 {dest && (
                   <>
                     <div className="my-2 h-px bg-border" />
@@ -587,9 +587,26 @@ function RidePage() {
                     <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
                   </>
                 )}
+                {dest && routeInfo && routeInfo.distanceMeters > 0 && (
+                  <>
+                    <div className="my-2 h-px bg-border" />
+                    <div className="flex items-center gap-3 text-[11px] font-semibold">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                        {formatMeters(routeInfo.distanceMeters)}
+                      </span>
+                      <span className="rounded-full bg-secondary/10 px-2 py-0.5">
+                        ~{formatDuration(routeInfo.durationSeconds)}
+                      </span>
+                      <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                        via {selected === "auto" ? "roads" : "fastest"}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
+
 
           {etaLabel && etaMinutes !== null && (
             <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
