@@ -56,6 +56,14 @@ function attemptLoad(): Promise<GoogleMapsApi> {
   return new Promise((resolve, reject) => {
     const timeoutMs = 12000;
     let done = false;
+    window.gm_authFailure = () => {
+      window.__rcGmAuthFailed = true;
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      reject(new Error("Google Maps authentication failed (referrer not allowed)"));
+    };
+
     const timer = window.setTimeout(() => {
       if (done) return;
       done = true;
