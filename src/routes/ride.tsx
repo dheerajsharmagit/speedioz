@@ -641,9 +641,14 @@ function RidePage() {
                 setLocating(true);
                 navigator.geolocation.getCurrentPosition(
                   (pos) => {
-                    setPickup({ label: "Current location", lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    setPickup({ label: "Current location", lat, lng });
                     setPickupQuery("");
                     setLocating(false);
+                    reverseGeocode(lat, lng).then((addr) => {
+                      if (addr) setPickup((prev) => (prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev));
+                    });
                   },
                   () => setLocating(false),
                   { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
