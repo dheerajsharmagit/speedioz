@@ -232,6 +232,9 @@ function RidePage() {
           setPickup({ label: "Current location", ...p });
           firstFixRef.current = true;
           setLocating(false);
+          reverseGeocode(p.lat, p.lng).then((addr) => {
+            if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+          });
         }
       },
       (err) => {
