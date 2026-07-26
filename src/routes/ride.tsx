@@ -181,6 +181,8 @@ function RidePage() {
   const approachFetchedRef = useRef<string | null>(null);
   const firstFixRef = useRef(false);
 
+  const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
+
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("unavailable");
@@ -196,6 +198,9 @@ function RidePage() {
         setPickup({ label: "Current location", ...p });
         firstFixRef.current = true;
         setLocating(false);
+        reverseGeocode(p.lat, p.lng).then((addr) => {
+          if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+        });
       },
       (err) => {
         const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
