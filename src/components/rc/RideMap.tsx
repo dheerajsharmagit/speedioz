@@ -5,7 +5,9 @@ import {
   type GooglePolyline,
   loadGoogleMaps,
   resetGoogleMapsLoader,
+  onGoogleMapsAuthFailure,
 } from "@/lib/google-maps-loader";
+
 import { useTheme } from "@/lib/theme";
 
 // Lazy so Leaflet (which touches `window` at import time) never loads on the
