@@ -125,6 +125,11 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       mapRef.current.fitBounds(bounds, 60);
       setMapReady(true);
     })();
+    const offAuth = onGoogleMapsAuthFailure(() => {
+      if (cancelled) return;
+      setLoadError("Google Maps authentication failed for this domain");
+    });
+
     return () => {
       cancelled = true;
       pickupMarkerRef.current?.setMap(null);
