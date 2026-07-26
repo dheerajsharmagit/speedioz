@@ -59,6 +59,40 @@ function formatMeters(m: number): string {
   return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
 }
 
+function formatDuration(sec: number): string {
+  if (!sec || sec < 60) return `${Math.max(1, Math.round(sec / 60))} min`;
+  const mins = Math.round(sec / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m} min` : `${h}h`;
+}
+
+// Reverse-geocode a lat/lng to a human address using OpenStreetMap Nominatim.
+// Free, no key required. Falls back silently on failure.
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { display_name?: string; address?: Record<string, string> };
+    if (j.address) {
+      const a = j.address;
+      const parts = [
+        a.road || a.pedestrian || a.neighbourhood || a.suburb,
+        a.suburb && a.road ? a.suburb : null,
+        a.city || a.town || a.village,
+      ].filter(Boolean);
+      if (parts.length) return parts.join(", ");
+    }
+    return j.display_name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Return index of the step whose endLocation is the next waypoint ahead of `pos`.
 function activeStepIndex(steps: RouteStep[], pos: { lat: number; lng: number }): number {
   if (steps.length === 0) return -1;
@@ -147,6 +181,8 @@ function RidePage() {
   const approachFetchedRef = useRef<string | null>(null);
   const firstFixRef = useRef(false);
 
+  const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
+
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("unavailable");
@@ -162,6 +198,9 @@ function RidePage() {
         setPickup({ label: "Current location", ...p });
         firstFixRef.current = true;
         setLocating(false);
+        reverseGeocode(p.lat, p.lng).then((addr) => {
+          if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+        });
       },
       (err) => {
         const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
@@ -193,6 +232,9 @@ function RidePage() {
           setPickup({ label: "Current location", ...p });
           firstFixRef.current = true;
           setLocating(false);
+          reverseGeocode(p.lat, p.lng).then((addr) => {
+            if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+          });
         }
       },
       (err) => {
@@ -278,6 +320,7 @@ function RidePage() {
         if (!cancelled) {
           setEncodedPolyline(res.encodedPolyline);
           setRouteSteps(res.steps ?? []);
+          setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
         }
       } catch (e) {
         console.warn("route fetch failed", e);
@@ -536,7 +579,7 @@ function RidePage() {
             ) : (
               <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
                 <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-                <p className="mt-1 text-xs font-semibold">{pickup.label}</p>
+                <p className="mt-1 text-xs font-semibold">{locating ? "Locating you…" : pickup.label}</p>
                 {dest && (
                   <>
                     <div className="my-2 h-px bg-border" />
@@ -544,9 +587,26 @@ function RidePage() {
                     <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
                   </>
                 )}
+                {dest && routeInfo && routeInfo.distanceMeters > 0 && (
+                  <>
+                    <div className="my-2 h-px bg-border" />
+                    <div className="flex items-center gap-3 text-[11px] font-semibold">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                        {formatMeters(routeInfo.distanceMeters)}
+                      </span>
+                      <span className="rounded-full bg-secondary/10 px-2 py-0.5">
+                        ~{formatDuration(routeInfo.durationSeconds)}
+                      </span>
+                      <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                        via {selected === "auto" ? "roads" : "fastest"}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
+
 
           {etaLabel && etaMinutes !== null && (
             <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
@@ -581,9 +641,14 @@ function RidePage() {
                 setLocating(true);
                 navigator.geolocation.getCurrentPosition(
                   (pos) => {
-                    setPickup({ label: "Current location", lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    setPickup({ label: "Current location", lat, lng });
                     setPickupQuery("");
                     setLocating(false);
+                    reverseGeocode(lat, lng).then((addr) => {
+                      if (addr) setPickup((prev) => (prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev));
+                    });
                   },
                   () => setLocating(false),
                   { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
@@ -595,7 +660,9 @@ function RidePage() {
               query={destQuery}
               setQuery={setDestQuery}
               onNext={() => dest && setStep("vehicle")}
+              routeInfo={routeInfo}
             />
+
           )}
 
           {step === "vehicle" && (
@@ -618,7 +685,11 @@ function RidePage() {
               setPayment={setPayment}
               onNext={createRide}
               busy={creating}
+              routeInfo={routeInfo}
+              pickupLabel={pickup.label}
+              dropLabel={dest?.addr ?? ""}
             />
+
           )}
 
           {step === "searching" && <SearchingStep onCancel={cancelSearch} />}
@@ -704,6 +775,7 @@ function DestinationStep({
   query,
   setQuery,
   onNext,
+  routeInfo,
 }: {
   pickup: Pickup;
   setPickup: (p: Pickup) => void;
@@ -716,6 +788,7 @@ function DestinationStep({
   query: string;
   setQuery: (v: string) => void;
   onNext: () => void;
+  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
 }) {
   const [editPickup, setEditPickup] = useState(false);
   return (
@@ -780,6 +853,27 @@ function DestinationStep({
           bias={{ lat: pickup.lat, lng: pickup.lng }}
         />
       </div>
+
+      {dest && routeInfo && routeInfo.distanceMeters > 0 && (
+        <div className="mb-4 px-6">
+          <div className="flex items-stretch gap-2 rounded-2xl border border-border bg-muted/40 p-3">
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Distance</p>
+              <p className="mt-1 text-base font-extrabold">{formatMeters(routeInfo.distanceMeters)}</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Est. time</p>
+              <p className="mt-1 text-base font-extrabold">{formatDuration(routeInfo.durationSeconds)}</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Route</p>
+              <p className="mt-1 text-[11px] font-bold">Fastest path</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="px-6 pb-12">
         <button
@@ -882,7 +976,7 @@ function VehicleStep({
 
 /* ---------- Confirm ---------- */
 function ConfirmStep({
-  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy,
+  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -892,6 +986,9 @@ function ConfirmStep({
   setPayment: (p: Payment) => void;
   onNext: () => void;
   busy: boolean;
+  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
+  pickupLabel: string;
+  dropLabel: string;
 }) {
   const methods: { id: Payment; label: string; sub: string }[] = [
     { id: "upi", label: "UPI", sub: "rider@okhdfc" },
@@ -906,6 +1003,31 @@ function ConfirmStep({
 
       <div className="mb-4 px-6">
         <div className="rounded-2xl border border-border p-4">
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Pickup</p>
+                <p className="truncate text-xs font-semibold">{pickupLabel}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Drop</p>
+                <p className="truncate text-xs font-semibold">{dropLabel}</p>
+              </div>
+            </div>
+          </div>
+          {routeInfo && routeInfo.distanceMeters > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-[11px] font-semibold">
+              <span>{formatMeters(routeInfo.distanceMeters)}</span>
+              <span className="text-muted-foreground">·</span>
+              <span>~{formatDuration(routeInfo.durationSeconds)}</span>
+              <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Fastest route</span>
+            </div>
+          )}
+          <div className="my-3 h-px bg-border" />
           <div className="flex items-center justify-between">
             <div>
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Vehicle</p>
