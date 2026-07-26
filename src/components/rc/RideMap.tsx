@@ -369,7 +369,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   }
 
   return (
-    <div className={`relative ${className ?? "h-full w-full"}`}>
+    <div className={className ?? "relative h-full w-full"}>
       <div ref={containerRef} className="absolute inset-0 bg-muted" />
     </div>
   );
