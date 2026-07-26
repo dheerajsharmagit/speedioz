@@ -320,6 +320,7 @@ function RidePage() {
         if (!cancelled) {
           setEncodedPolyline(res.encodedPolyline);
           setRouteSteps(res.steps ?? []);
+          setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
         }
       } catch (e) {
         console.warn("route fetch failed", e);
