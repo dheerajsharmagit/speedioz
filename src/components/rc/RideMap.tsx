@@ -341,7 +341,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
 
   if (loadError) {
     return (
-      <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
+      <div className={`relative ${className ?? "h-full w-full"}`}>
         <Suspense fallback={<div className="absolute inset-0 bg-muted" />}>
           <LeafletFallbackMap
             pickup={pickup}
