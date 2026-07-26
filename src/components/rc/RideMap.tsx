@@ -333,15 +333,18 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   if (loadError) {
     return (
       <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
-        <LeafletFallbackMap
-          pickup={pickup}
-          drop={drop}
-          captain={captain}
-          userLocation={userLocation}
-          polyline={polyline}
-          className="absolute inset-0"
-          fitKey={fitKey}
-        />
+        <Suspense fallback={<div className="absolute inset-0 bg-muted" />}>
+          <LeafletFallbackMap
+            pickup={pickup}
+            drop={drop}
+            captain={captain}
+            userLocation={userLocation}
+            polyline={polyline}
+            className="absolute inset-0"
+            fitKey={fitKey}
+          />
+        </Suspense>
+
         <div className="pointer-events-auto absolute right-2 top-2 flex items-center gap-2 rounded-full bg-background/95 px-3 py-1.5 text-[11px] shadow-md">
           <span className="text-muted-foreground">Using backup map</span>
           <button
