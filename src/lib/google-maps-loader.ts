@@ -42,8 +42,11 @@ declare global {
   interface Window {
     __rcInitGoogleMaps?: () => void;
     google?: GoogleMapsApi;
+    gm_authFailure?: () => void;
+    __rcGmAuthFailed?: boolean;
   }
 }
+
 
 function attemptLoad(): Promise<GoogleMapsApi> {
   const browserKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined;
