@@ -96,7 +96,28 @@ function attemptLoad(): Promise<GoogleMapsApi> {
 export function resetGoogleMapsLoader(): void {
   loaderPromise = null;
   attemptCount = 0;
+  if (typeof window !== "undefined") window.__rcGmAuthFailed = false;
 }
+
+const authFailureListeners = new Set<() => void>();
+export function onGoogleMapsAuthFailure(cb: () => void): () => void {
+  if (typeof window !== "undefined") {
+    if (window.__rcGmAuthFailed) {
+      cb();
+      return () => {};
+    }
+    // (Re)install a hook that also notifies listeners.
+    const prev = window.gm_authFailure;
+    window.gm_authFailure = () => {
+      window.__rcGmAuthFailed = true;
+      prev?.();
+      authFailureListeners.forEach((fn) => fn());
+    };
+  }
+  authFailureListeners.add(cb);
+  return () => authFailureListeners.delete(cb);
+}
+
 
 export function loadGoogleMaps(): Promise<GoogleMapsApi> {
   if (typeof window === "undefined") {
