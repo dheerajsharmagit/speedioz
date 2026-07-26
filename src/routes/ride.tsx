@@ -59,6 +59,40 @@ function formatMeters(m: number): string {
   return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
 }
 
+function formatDuration(sec: number): string {
+  if (!sec || sec < 60) return `${Math.max(1, Math.round(sec / 60))} min`;
+  const mins = Math.round(sec / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m} min` : `${h}h`;
+}
+
+// Reverse-geocode a lat/lng to a human address using OpenStreetMap Nominatim.
+// Free, no key required. Falls back silently on failure.
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { display_name?: string; address?: Record<string, string> };
+    if (j.address) {
+      const a = j.address;
+      const parts = [
+        a.road || a.pedestrian || a.neighbourhood || a.suburb,
+        a.suburb && a.road ? a.suburb : null,
+        a.city || a.town || a.village,
+      ].filter(Boolean);
+      if (parts.length) return parts.join(", ");
+    }
+    return j.display_name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Return index of the step whose endLocation is the next waypoint ahead of `pos`.
 function activeStepIndex(steps: RouteStep[], pos: { lat: number; lng: number }): number {
   if (steps.length === 0) return -1;
