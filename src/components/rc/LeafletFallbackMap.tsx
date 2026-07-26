@@ -142,7 +142,7 @@ export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyli
   useEffect(() => { if (readyRef.current) applyBounds(); }, [pickup, drop, captain, polyline, fitKey]);
 
   return (
-    <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
+    <div className={className ?? "relative h-full w-full"}>
       <div ref={containerRef} className="absolute inset-0 bg-muted" />
       <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-background/90 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground shadow-sm">
         Fallback map
