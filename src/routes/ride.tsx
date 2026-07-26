@@ -660,7 +660,9 @@ function RidePage() {
               query={destQuery}
               setQuery={setDestQuery}
               onNext={() => dest && setStep("vehicle")}
+              routeInfo={routeInfo}
             />
+
           )}
 
           {step === "vehicle" && (
