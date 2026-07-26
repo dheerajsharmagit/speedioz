@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   type GoogleMap,
   type GoogleMarker,
   type GooglePolyline,
   loadGoogleMaps,
   resetGoogleMapsLoader,
+  onGoogleMapsAuthFailure,
 } from "@/lib/google-maps-loader";
-import { LeafletFallbackMap } from "./LeafletFallbackMap";
+
 import { useTheme } from "@/lib/theme";
+
+// Lazy so Leaflet (which touches `window` at import time) never loads on the
+// server. Importing it eagerly breaks SSR of the /ride route.
+const LeafletFallbackMap = lazy(() =>
+  import("./LeafletFallbackMap").then((m) => ({ default: m.LeafletFallbackMap })),
+);
+
 
 
 type LatLng = { lat: number; lng: number };
@@ -117,8 +125,14 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       mapRef.current.fitBounds(bounds, 60);
       setMapReady(true);
     })();
+    const offAuth = onGoogleMapsAuthFailure(() => {
+      if (cancelled) return;
+      setLoadError("Google Maps authentication failed for this domain");
+    });
+
     return () => {
       cancelled = true;
+      offAuth();
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
@@ -128,6 +142,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       traveledRef.current?.setMap(null);
       mapRef.current = null;
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryTick]);
 
@@ -326,16 +341,20 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
 
   if (loadError) {
     return (
-      <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
-        <LeafletFallbackMap
-          pickup={pickup}
-          drop={drop}
-          captain={captain}
-          userLocation={userLocation}
-          polyline={polyline}
-          className="absolute inset-0"
-          fitKey={fitKey}
-        />
+      <div className={className ?? "relative h-full w-full"}>
+
+        <Suspense fallback={<div className="absolute inset-0 bg-muted" />}>
+          <LeafletFallbackMap
+            pickup={pickup}
+            drop={drop}
+            captain={captain}
+            userLocation={userLocation}
+            polyline={polyline}
+            className="absolute inset-0"
+            fitKey={fitKey}
+          />
+        </Suspense>
+
         <div className="pointer-events-auto absolute right-2 top-2 flex items-center gap-2 rounded-full bg-background/95 px-3 py-1.5 text-[11px] shadow-md">
           <span className="text-muted-foreground">Using backup map</span>
           <button
@@ -350,10 +369,11 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   }
 
   return (
-    <div className={className ?? "h-full w-full"} style={{ position: "relative" }}>
+    <div className={className ?? "relative h-full w-full"}>
       <div ref={containerRef} className="absolute inset-0 bg-muted" />
     </div>
   );
 }
+
 
 

@@ -42,8 +42,11 @@ declare global {
   interface Window {
     __rcInitGoogleMaps?: () => void;
     google?: GoogleMapsApi;
+    gm_authFailure?: () => void;
+    __rcGmAuthFailed?: boolean;
   }
 }
+
 
 function attemptLoad(): Promise<GoogleMapsApi> {
   const browserKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined;
@@ -53,6 +56,14 @@ function attemptLoad(): Promise<GoogleMapsApi> {
   return new Promise((resolve, reject) => {
     const timeoutMs = 12000;
     let done = false;
+    window.gm_authFailure = () => {
+      window.__rcGmAuthFailed = true;
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      reject(new Error("Google Maps authentication failed (referrer not allowed)"));
+    };
+
     const timer = window.setTimeout(() => {
       if (done) return;
       done = true;
@@ -85,7 +96,28 @@ function attemptLoad(): Promise<GoogleMapsApi> {
 export function resetGoogleMapsLoader(): void {
   loaderPromise = null;
   attemptCount = 0;
+  if (typeof window !== "undefined") window.__rcGmAuthFailed = false;
 }
+
+const authFailureListeners = new Set<() => void>();
+export function onGoogleMapsAuthFailure(cb: () => void): () => void {
+  if (typeof window !== "undefined") {
+    if (window.__rcGmAuthFailed) {
+      cb();
+      return () => {};
+    }
+    // (Re)install a hook that also notifies listeners.
+    const prev = window.gm_authFailure;
+    window.gm_authFailure = () => {
+      window.__rcGmAuthFailed = true;
+      prev?.();
+      authFailureListeners.forEach((fn) => fn());
+    };
+  }
+  authFailureListeners.add(cb);
+  return () => authFailureListeners.delete(cb);
+}
+
 
 export function loadGoogleMaps(): Promise<GoogleMapsApi> {
   if (typeof window === "undefined") {
