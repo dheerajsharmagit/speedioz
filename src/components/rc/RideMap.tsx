@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   type GoogleMap,
   type GoogleMarker,
@@ -6,8 +6,14 @@ import {
   loadGoogleMaps,
   resetGoogleMapsLoader,
 } from "@/lib/google-maps-loader";
-import { LeafletFallbackMap } from "./LeafletFallbackMap";
 import { useTheme } from "@/lib/theme";
+
+// Lazy so Leaflet (which touches `window` at import time) never loads on the
+// server. Importing it eagerly breaks SSR of the /ride route.
+const LeafletFallbackMap = lazy(() =>
+  import("./LeafletFallbackMap").then((m) => ({ default: m.LeafletFallbackMap })),
+);
+
 
 
 type LatLng = { lat: number; lng: number };
