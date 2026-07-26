@@ -685,7 +685,11 @@ function RidePage() {
               setPayment={setPayment}
               onNext={createRide}
               busy={creating}
+              routeInfo={routeInfo}
+              pickupLabel={pickup.label}
+              dropLabel={dest?.addr ?? ""}
             />
+
           )}
 
           {step === "searching" && <SearchingStep onCancel={cancelSearch} />}
