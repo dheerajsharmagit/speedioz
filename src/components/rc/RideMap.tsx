@@ -132,6 +132,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
 
     return () => {
       cancelled = true;
+      offAuth();
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
@@ -141,6 +142,7 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
       traveledRef.current?.setMap(null);
       mapRef.current = null;
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryTick]);
 
