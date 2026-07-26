@@ -976,7 +976,7 @@ function VehicleStep({
 
 /* ---------- Confirm ---------- */
 function ConfirmStep({
-  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy,
+  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -986,6 +986,9 @@ function ConfirmStep({
   setPayment: (p: Payment) => void;
   onNext: () => void;
   busy: boolean;
+  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
+  pickupLabel: string;
+  dropLabel: string;
 }) {
   const methods: { id: Payment; label: string; sub: string }[] = [
     { id: "upi", label: "UPI", sub: "rider@okhdfc" },
@@ -1000,6 +1003,31 @@ function ConfirmStep({
 
       <div className="mb-4 px-6">
         <div className="rounded-2xl border border-border p-4">
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Pickup</p>
+                <p className="truncate text-xs font-semibold">{pickupLabel}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase text-muted-foreground">Drop</p>
+                <p className="truncate text-xs font-semibold">{dropLabel}</p>
+              </div>
+            </div>
+          </div>
+          {routeInfo && routeInfo.distanceMeters > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-[11px] font-semibold">
+              <span>{formatMeters(routeInfo.distanceMeters)}</span>
+              <span className="text-muted-foreground">·</span>
+              <span>~{formatDuration(routeInfo.durationSeconds)}</span>
+              <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Fastest route</span>
+            </div>
+          )}
+          <div className="my-3 h-px bg-border" />
           <div className="flex items-center justify-between">
             <div>
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Vehicle</p>
