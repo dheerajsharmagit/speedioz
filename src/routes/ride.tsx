@@ -775,6 +775,7 @@ function DestinationStep({
   query,
   setQuery,
   onNext,
+  routeInfo,
 }: {
   pickup: Pickup;
   setPickup: (p: Pickup) => void;
@@ -787,6 +788,7 @@ function DestinationStep({
   query: string;
   setQuery: (v: string) => void;
   onNext: () => void;
+  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
 }) {
   const [editPickup, setEditPickup] = useState(false);
   return (
