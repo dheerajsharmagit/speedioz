@@ -854,6 +854,27 @@ function DestinationStep({
         />
       </div>
 
+      {dest && routeInfo && routeInfo.distanceMeters > 0 && (
+        <div className="mb-4 px-6">
+          <div className="flex items-stretch gap-2 rounded-2xl border border-border bg-muted/40 p-3">
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Distance</p>
+              <p className="mt-1 text-base font-extrabold">{formatMeters(routeInfo.distanceMeters)}</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Est. time</p>
+              <p className="mt-1 text-base font-extrabold">{formatDuration(routeInfo.durationSeconds)}</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="flex-1 text-center">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Route</p>
+              <p className="mt-1 text-[11px] font-bold">Fastest path</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-6 pb-12">
         <button
           disabled={!dest}
