@@ -13,7 +13,7 @@ import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 export const Route = createFileRoute("/ride")({
   head: () => ({
     meta: [
-      { title: "Book a ride — RideConnect AI" },
+      { title: "Book a ride — RIDEHER" },
       { name: "description", content: "Bike, auto, and EV rides with community-verified smart routes." },
     ],
   }),
