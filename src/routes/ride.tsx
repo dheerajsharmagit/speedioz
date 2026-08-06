@@ -472,7 +472,7 @@ function RidePage() {
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
-              RideConnect<span className="text-primary">.</span>
+              RIDE<span className="text-primary">HER</span>
             </Link>
           ) : (
             <button
