@@ -221,7 +221,7 @@ function Landing() {
             <h1 className="mt-6 text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">
               India's Trusted
               <br />
-              Women-Only
+              Women- Preferred&nbsp;
               <br />
               Ride Platform<span className="text-primary">.</span>
             </h1>
