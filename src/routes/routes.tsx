@@ -2,13 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RoutePreviewMap } from "@/components/rc/RoutePreviewMap";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import type { CommunityRoute } from "@/lib/rides";
 
 export const Route = createFileRoute("/routes")({
   head: () => ({
     meta: [
-      { title: "Community Routes — RideConnect AI" },
+      { title: "Community Routes — RIDEHER" },
       { name: "description", content: "Captain-verified shortcuts that beat Google Maps. Ranked by time saved, safety, and confidence." },
     ],
   }),
@@ -19,12 +19,8 @@ function RoutesPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["community-routes"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("community_routes")
-        .select("*")
-        .order("savings_min", { ascending: false });
-      if (error) throw error;
-      return data as CommunityRoute[];
+      const res = await api<any>("/community-routes");
+      return res.data as CommunityRoute[];
     },
   });
 
