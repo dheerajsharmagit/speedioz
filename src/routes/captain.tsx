@@ -9,8 +9,8 @@ import type { Ride } from "@/lib/rides";
 export const Route = createFileRoute("/captain")({
   head: () => ({
     meta: [
-      { title: "Captain Portal — RideConnect AI" },
-      { name: "description", content: "Real-time ride requests, earnings, and community route submissions for RideConnect captains." },
+      { title: "Captain Portal — RIDEHER" },
+      { name: "description", content: "Real-time ride requests, earnings, and community route submissions for RIDEHER captains." },
     ],
   }),
   component: CaptainPage,

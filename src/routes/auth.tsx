@@ -4,13 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 
 type Role = "rider" | "captain";
-const ROLE_KEY = "rc-pending-role";
+const ROLE_KEY = "rh-pending-role";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
+    return {
+      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : undefined) as "signin" | "signup" | undefined,
+    };
+  },
   head: () => ({
     meta: [
-      { title: "Sign in — RideConnect AI" },
-      { name: "description", content: "Sign in as a rider or captain with Google or email." },
+      { title: "Sign in — RIDEHER" },
+      { name: "description", content: "Sign in as a customer or captain with Google or email." },
     ],
   }),
   component: AuthPage,
@@ -30,8 +35,9 @@ async function applyRole(role: Role) {
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { mode: initialMode } = Route.useSearch();
   const [role, setRole] = useState<Role>("rider");
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,7 +112,7 @@ function AuthPage() {
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background px-6 py-10">
         <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
-          RideConnect<span className="text-primary">.</span>
+          RIDE<span className="text-primary">HER</span>
         </Link>
 
         <div className="mt-12">
@@ -114,10 +120,10 @@ function AuthPage() {
             {mode === "signup" ? "Create your account" : "Welcome back"}
           </p>
           <h1 className="mt-3 text-4xl font-extrabold tracking-tight">
-            {mode === "signup" ? "Ride smarter." : "Sign in."}
+            {mode === "signup" ? "Travel safely." : "Welcome back."}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Choose how you want to use RideConnect.
+            Choose how you want to use RIDEHER.
           </p>
         </div>
 

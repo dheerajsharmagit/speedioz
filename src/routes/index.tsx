@@ -179,12 +179,14 @@ function Landing() {
           <div className="flex items-center gap-2">
             <Link
               to="/auth"
+              search={{ mode: "signin" }}
               className="hidden rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline-flex"
             >
               Login
             </Link>
             <Link
               to="/auth"
+              search={{ mode: "signup" }}
               className="hidden rounded-full border border-border px-3 py-2 text-xs font-semibold hover:bg-muted sm:inline-flex"
             >
               Register
