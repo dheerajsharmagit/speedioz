@@ -25,7 +25,7 @@ const MODES: { id: Mode; label: string; desc: string }[] = [
 
 function SettingsPage() {
   const { intensity, mode, setIntensity, setMode, markers } = useTheme();
-  const riderStatus = "PENDING";
+  const customerStatus = "ACTIVE";
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -39,26 +39,26 @@ function SettingsPage() {
         <section className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Verification status</p>
-              <h2 className="mt-2 text-xl font-extrabold">Rider profile</h2>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Account status</p>
+              <h2 className="mt-2 text-xl font-extrabold">Customer profile</h2>
             </div>
             <span
               className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${
-                riderStatus === "VERIFIED"
+                customerStatus === "ACTIVE"
                   ? "bg-emerald-500/10 text-emerald-600"
                   : "bg-amber-500/10 text-amber-600"
               }`}
             >
-              {riderStatus === "VERIFIED" ? "Verified" : "Under review"}
+              {customerStatus === "ACTIVE" ? "Active" : "Pending"}
             </span>
           </div>
 
           <div className="mt-4 rounded-2xl border border-dashed border-border bg-background/70 p-4">
-            <p className="text-sm font-semibold">Documents submitted</p>
+            <p className="text-sm font-semibold">Booking access</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {riderStatus === "VERIFIED"
-                ? "Your rider access has been approved. You can book rides normally."
-                : "Your verification is being reviewed by the operations team. You’ll be able to book once approved."}
+              {customerStatus === "ACTIVE"
+                ? "Your customer account is active and ready to book rides whenever you need it."
+                : "Your account is being prepared. You can continue once it is activated."}
             </p>
           </div>
         </section>

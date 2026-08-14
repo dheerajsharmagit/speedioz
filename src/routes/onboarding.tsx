@@ -5,18 +5,18 @@ import { storage } from "@/lib/api";
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
-      { title: "Rider onboarding — RIDEHER" },
-      { name: "description", content: "Complete your rider onboarding and verification before booking." },
+      { title: "Customer onboarding — RIDEHER" },
+      { name: "description", content: "Complete your customer setup and start booking rides." },
     ],
   }),
   component: OnboardingPage,
 });
 
 const steps = [
-  { title: "Create rider account", description: "Your account is created and ready for verification." },
-  { title: "Upload documents", description: "Add your identity, address proof, and profile photo." },
-  { title: "Admin review", description: "Our ops team checks your rider profile and documents." },
-  { title: "Approved access", description: "Once approved, you can book rides normally." },
+  { title: "Create customer account", description: "Your account is ready for secure ride booking." },
+  { title: "Set your trip preferences", description: "Choose your pickup, destination, and ride type." },
+  { title: "Book instantly", description: "Request a ride and track your captain in real time." },
+  { title: "Ride with confidence", description: "Travel safely with verified women captains and live trip updates." },
 ];
 
 function OnboardingPage() {
@@ -44,10 +44,10 @@ function OnboardingPage() {
         </Link>
 
         <div className="mt-4">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Rider account</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-tight">Finish your rider setup.</h1>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Customer account</p>
+          <h1 className="mt-3 text-4xl font-extrabold tracking-tight">Finish your trip setup.</h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Set up your account first, then submit your verification documents for approval.
+            Create your account and get ready to book safe rides in minutes.
           </p>
         </div>
 
@@ -66,9 +66,9 @@ function OnboardingPage() {
         </div>
 
         <div className="rounded-3xl border border-border bg-card p-4">
-          <p className="text-sm font-bold">Documents to upload</p>
+          <p className="text-sm font-bold">What you can do next</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Government ID, address proof, and a profile photo.
+            Save trip preferences, request rides, and track your captain in real time.
           </p>
         </div>
 
@@ -77,7 +77,7 @@ function OnboardingPage() {
           onClick={handleSubmit}
           className="mt-auto h-14 w-full rounded-2xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-transform active:scale-[0.98]"
         >
-          {submitted ? "Submitted for review" : "Submit rider documents"}
+          {submitted ? "Ready to ride" : "Continue to booking"}
         </button>
       </div>
     </div>

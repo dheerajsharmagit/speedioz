@@ -83,7 +83,7 @@ function AuthPage() {
         authRes = await authApi.login({ email, password });
       }
       storage.saveAuth(authRes);
-      navigate({ to: mode === "signup" ? "/onboarding" : "/ride" });
+      navigate({ to: "/ride" });
     } catch (e: any) {
       setError(e.error?.message || e.message || "Authentication failed");
     } finally {
@@ -155,7 +155,7 @@ function AuthPage() {
             className="h-14 w-full rounded-2xl bg-secondary text-sm font-bold text-secondary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "…" : mode === "signup"
-              ? "Create rider account"
+              ? "Create customer account"
               : "Sign in as customer"}
           </button>
         </form>
