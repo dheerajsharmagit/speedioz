@@ -1,0 +1,165 @@
+
+const API_URL = 'https://api.rideher.in/api/v1';
+const ACCESS_TOKEN_KEY = 'rh_access_token';
+const REFRESH_TOKEN_KEY = 'rh_refresh_token';
+const USER_KEY = 'rh_user';
+
+export type AuthUser = {
+  id: string;
+  role: "CUSTOMER" | "CAPTAIN" | "ADMIN";
+  gender: "FEMALE" | "MALE" | "OTHER";
+  email: string | null;
+  phone: string | null;
+  name: string;
+  isSuspended: boolean;
+};
+
+export type AuthResponse = {
+  user: AuthUser;
+  tokens: { accessToken: string; refreshToken: string };
+};
+
+export type ApiError = {
+  code: string;
+  message: string;
+  requestId: string;
+  details?: unknown;
+};
+
+export class RequestError extends Error {
+  constructor(public status: number, public error: ApiError) {
+    super(error.message || `Request failed with status ${status}`);
+    this.name = 'RequestError';
+  }
+}
+
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+function onRefreshed(token: string) {
+  refreshSubscribers.map((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+export const storage = {
+  getAccessToken: () => localStorage.getItem(ACCESS_TOKEN_KEY),
+  getRefreshToken: () => localStorage.getItem(REFRESH_TOKEN_KEY),
+  getUser: (): AuthUser | null => {
+    const u = localStorage.getItem(USER_KEY);
+    return u ? JSON.parse(u) : null;
+  },
+  saveAuth: (res: AuthResponse) => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, res.tokens.accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, res.tokens.refreshToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(res.user));
+  },
+  clearAuth: () => {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  },
+};
+
+async function refreshToken(): Promise<string> {
+  const rt = storage.getRefreshToken();
+  if (!rt) throw new Error('No refresh token');
+
+  const res = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: rt }),
+  });
+
+  if (!res.ok) {
+    storage.clearAuth();
+    throw new Error('Refresh failed');
+  }
+
+  const data: AuthResponse = await res.json();
+  storage.saveAuth(data);
+  return data.tokens.accessToken;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = storage.getAccessToken();
+  
+  const headers = new Headers(init.headers);
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 401 && storage.getRefreshToken()) {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      try {
+        const newToken = await refreshToken();
+        isRefreshing = false;
+        onRefreshed(newToken);
+      } catch (e) {
+        isRefreshing = false;
+        throw e;
+      }
+    }
+
+    const retryToken = await new Promise<string>((resolve) => {
+      addRefreshSubscriber((token) => resolve(token));
+    });
+
+    const retryHeaders = new Headers(init.headers);
+    retryHeaders.set('Content-Type', 'application/json');
+    retryHeaders.set('Authorization', `Bearer ${retryToken}`);
+
+    const retryResponse = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: retryHeaders,
+    });
+
+    if (!retryResponse.ok) {
+      const errorData = await retryResponse.json().catch(() => ({ message: 'Request failed' }));
+      throw new RequestError(retryResponse.status, errorData);
+    }
+    return retryResponse.status === 204 ? (undefined as T) : retryResponse.json();
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new RequestError(response.status, errorData);
+  }
+
+  return response.status === 204 ? (undefined as T) : response.json();
+}
+
+// Auth methods
+export const authApi = {
+  signup: (data: any) => api<AuthResponse>('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data: any) => api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  signupGoogle: (credential: string) => api<AuthResponse>('/auth/signup/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  loginGoogle: (credential: string) => api<AuthResponse>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  logout: () => api('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: storage.getRefreshToken() }) }).finally(() => storage.clearAuth()),
+  me: () => api<{ user: AuthUser }>('/auth/me'),
+};
+
+// Ride methods
+export const rideApi = {
+  create: (data: any) => api<any>('/rides', { method: 'POST', body: JSON.stringify(data) }),
+  get: (id: string) => api<any>(`/rides/${id}`),
+  updateStatus: (id: string, status: string) => api(`/rides/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+};
+
+// User methods
+export const userApi = {
+  getMe: () => api<{ user: AuthUser }>('/users/me'),
+  updateMe: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  getSavedPlaces: () => api<{ data: any[] }>('/users/me/saved-places'),
+  addSavedPlace: (data: any) => api<{ data: any }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+};
