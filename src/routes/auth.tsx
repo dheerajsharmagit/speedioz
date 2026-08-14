@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 
-type Role = "rider" | "captain";
+type Role = "rider";
 const ROLE_KEY = "rh-pending-role";
 
 export const Route = createFileRoute("/auth")({
@@ -36,7 +36,7 @@ async function applyRole(role: Role) {
 function AuthPage() {
   const navigate = useNavigate();
   const { mode: initialMode } = Route.useSearch();
-  const [role, setRole] = useState<Role>("rider");
+  const [role] = useState<Role>("rider");
   const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -123,26 +123,10 @@ function AuthPage() {
             {mode === "signup" ? "Travel safely." : "Welcome back."}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Choose how you want to use RIDEHER.
+            Sign in to your customer account to book a safe ride.
           </p>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
-          {(["rider", "captain"] as const).map((r) => {
-            const active = role === r;
-            return (
-              <button
-                key={r}
-                onClick={() => setRole(r)}
-                className={`h-12 rounded-xl font-mono text-[11px] font-bold uppercase tracking-widest transition ${
-                  active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
-              >
-                {r === "rider" ? "I'm a Customer" : "I'm a Captain"}
-              </button>
-            );
-          })}
-        </div>
 
         <button
           onClick={handleGoogle}
@@ -188,8 +172,8 @@ function AuthPage() {
             className="h-14 w-full rounded-2xl bg-secondary text-sm font-bold text-secondary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "…" : mode === "signup"
-              ? role === "captain" ? "Create captain account" : "Create customer account"
-              : role === "captain" ? "Sign in as captain" : "Sign in as customer"}
+              ? "Create customer account"
+              : "Sign in as customer"}
           </button>
         </form>
 

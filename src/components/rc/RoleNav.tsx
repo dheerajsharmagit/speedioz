@@ -3,8 +3,6 @@ import { Link, useRouterState } from "@tanstack/react-router";
 const roles = [
   { to: "/", label: "Home" },
   { to: "/ride", label: "Ride" },
-  { to: "/captain", label: "Captain" },
-  { to: "/admin", label: "Admin" },
   { to: "/routes", label: "Community" },
   { to: "/settings", label: "Settings" },
   { to: "/auth", label: "Sign in" },
