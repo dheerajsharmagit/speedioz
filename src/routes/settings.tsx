@@ -5,7 +5,7 @@ import { useTheme, type Intensity, type Mode } from "@/lib/theme";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings — RideConnect AI" },
+      { title: "Settings — RIDEHER" },
       { name: "description", content: "Personalize the pink theme intensity and appearance." },
     ],
   }),
