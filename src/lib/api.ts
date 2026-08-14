@@ -154,6 +154,7 @@ export const rideApi = {
   create: (data: any) => api<any>('/rides', { method: 'POST', body: JSON.stringify(data) }),
   get: (id: string) => api<any>(`/rides/${id}`),
   updateStatus: (id: string, status: string) => api(`/rides/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  rate: (id: string, data: any) => api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // User methods

@@ -371,7 +371,7 @@ function RidePage() {
   }
   async function submitRating() {
     if (!ride) return;
-    await api(`/rides/${ride.id}/rate`, { method: 'POST', body: JSON.stringify({ rating, tip_inr: tip }) });
+    await rideApi.rate(ride.id, { rating, tip_inr: tip });
     // reset
     setRide(null);
     setDest(null);
