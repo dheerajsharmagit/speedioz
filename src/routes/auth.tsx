@@ -22,7 +22,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 function destFor(role: Role) {
-  return role === "captain" ? "/captain" : "/ride";
+  return "/ride";
 }
 
 async function applyRole(role: Role) {
