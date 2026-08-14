@@ -7,6 +7,11 @@ type Role = "rider" | "captain";
 const ROLE_KEY = "rh-pending-role";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
+    return {
+      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : undefined) as "signin" | "signup" | undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Sign in — RIDEHER" },
@@ -30,7 +35,7 @@ async function applyRole(role: Role) {
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { mode: initialMode } = Route.useSearch<{ mode?: "signin" | "signup" }>();
+  const { mode: initialMode } = Route.useSearch();
   const [role, setRole] = useState<Role>("rider");
   const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
   const [email, setEmail] = useState("");
