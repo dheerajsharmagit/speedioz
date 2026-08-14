@@ -25,6 +25,8 @@ const MODES: { id: Mode; label: string; desc: string }[] = [
 
 function SettingsPage() {
   const { intensity, mode, setIntensity, setMode, markers } = useTheme();
+  const riderStatus = "PENDING";
+
   return (
     <div className="min-h-screen bg-background pb-32">
       <div className="mx-auto max-w-2xl px-6 pt-10">
@@ -33,6 +35,33 @@ function SettingsPage() {
         </Link>
         <h1 className="mt-4 text-4xl font-extrabold tracking-tight">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">Tune the pink to match your mood.</p>
+
+        <section className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Verification status</p>
+              <h2 className="mt-2 text-xl font-extrabold">Rider profile</h2>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${
+                riderStatus === "VERIFIED"
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : "bg-amber-500/10 text-amber-600"
+              }`}
+            >
+              {riderStatus === "VERIFIED" ? "Verified" : "Under review"}
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-dashed border-border bg-background/70 p-4">
+            <p className="text-sm font-semibold">Documents submitted</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {riderStatus === "VERIFIED"
+                ? "Your rider access has been approved. You can book rides normally."
+                : "Your verification is being reviewed by the operations team. You’ll be able to book once approved."}
+            </p>
+          </div>
+        </section>
 
         <section className="mt-10">
           <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Theme intensity</h2>
