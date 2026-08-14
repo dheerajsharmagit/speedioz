@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
-import { supabase } from "@/integrations/supabase/client";
+import { storage, rideApi, api } from "@/lib/api";
 import { getDeviceId } from "@/lib/device-id";
-import { ensureAnonSession } from "@/lib/anon-session";
 import type { Ride } from "@/lib/rides";
 
 export const Route = createFileRoute("/captain")({
@@ -40,88 +39,44 @@ function CaptainPage() {
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
-    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+    const user = storage.getUser();
+    if (user) userIdRef.current = user.id;
   }, []);
 
 
-  // Load current state
+  // Poll for rides
   useEffect(() => {
     if (!online) { setPending([]); return; }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("rides")
-        .select("*")
-        .eq("status", "searching")
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (!cancelled) setPending((data as Ride[]) ?? []);
+    
+    const poll = async () => {
+       try {
+         // This endpoint is an example, in reality we'd need a "GET /rides/available"
+         const res = await api<any>("/rides?status=searching");
+         setPending(res.data || []);
 
-      // Restore my active ride if any
-      const did = deviceIdRef.current || getDeviceId();
-      const { data: mine } = await supabase
-        .from("rides")
-        .select("*")
-        .eq("captain_device_id", did)
-        .in("status", ["accepted", "arriving", "in_progress", "completed"])
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!cancelled && mine) setActive(mine as Ride);
-    })();
-    return () => { cancelled = true; };
+         const did = deviceIdRef.current || getDeviceId();
+         // Another mock/example for getting active ride
+         const activeRes = await api<any>(`/rides/active?deviceId=${did}`);
+         if (activeRes.data) setActive(activeRes.data);
+       } catch (e) {
+         console.warn("Polling error", e);
+       }
+    };
+
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
   }, [online]);
-
-  // Realtime: pending queue
-  useEffect(() => {
-    if (!online) return;
-    const channel = supabase
-      .channel("captain-pending")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "rides" },
-        (payload) => {
-          const row = payload.new as Ride;
-          if (row.status === "searching") setPending((p) => [row, ...p].slice(0, 10));
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rides" },
-        (payload) => {
-          const row = payload.new as Ride;
-          setPending((p) => p.filter((r) => r.id !== row.id || row.status === "searching"));
-          if (active && row.id === active.id) setActive(row);
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [online, active?.id]);
 
   async function accept(ride: Ride) {
     setError(null);
-    const did = deviceIdRef.current || getDeviceId();
-    const uid = userIdRef.current || (await ensureAnonSession());
-    userIdRef.current = uid;
-    const { data, error } = await supabase
-      .from("rides")
-      .update({
-        status: "accepted",
-        captain_user_id: uid,
-        captain_device_id: did,
-        captain_name: CAPTAIN.name,
-        captain_plate: CAPTAIN.plate,
-        captain_vehicle: CAPTAIN.vehicle,
-        captain_rating: CAPTAIN.rating,
-      })
-      .eq("id", ride.id)
-      .eq("status", "searching") // don't grab if already taken
-      .select()
-      .maybeSingle();
-    if (error) { setError(error.message); return; }
-    if (!data) { setError("Ride was already taken."); return; }
-    setActive(data as Ride);
-    setPending((p) => p.filter((r) => r.id !== ride.id));
+    try {
+      const data = await rideApi.updateStatus(ride.id, "accepted");
+      setActive(data as Ride);
+      setPending((p) => p.filter((r) => r.id !== ride.id));
+    } catch (e: any) {
+      setError(e.error?.message || "Accept failed");
+    }
   }
 
   async function decline(rideId: string) {
