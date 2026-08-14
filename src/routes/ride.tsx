@@ -1176,10 +1176,10 @@ function useCaptainToPickup(ride: Ride) {
     const t = setInterval(async () => {
       i++;
       const pos = pointAt(path, Math.min(i / steps, 1));
-      await supabase.from("ride_locations").insert({ ride_id: ride.id, lat: pos.lat, lng: pos.lng });
+      await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
       if (i >= steps) {
         clearInterval(t);
-        await supabase.from("rides").update({ status: "arriving" }).eq("id", ride.id);
+        await rideApi.updateStatus(ride.id, "arriving");
       }
     }, 1200);
     return () => clearInterval(t);
@@ -1264,7 +1264,7 @@ function useCaptainDriving(ride: Ride) {
         interval = setInterval(async () => {
           i++;
           const pos = pointAt(path, Math.min(i / steps, 1));
-          await supabase.from("ride_locations").insert({ ride_id: ride.id, lat: pos.lat, lng: pos.lng });
+          await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
           if (i >= steps && interval) {
             clearInterval(interval);
           }

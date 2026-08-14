@@ -155,6 +155,7 @@ export const rideApi = {
   get: (id: string) => api<any>(`/rides/${id}`),
   updateStatus: (id: string, status: string) => api(`/rides/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   rate: (id: string, data: any) => api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
+  updateLocation: (id: string, lat: number, lng: number) => api(`/rides/${id}/location`, { method: 'POST', body: JSON.stringify({ lat, lng }) }),
 };
 
 // User methods
