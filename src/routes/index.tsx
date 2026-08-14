@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import mapHero from "@/assets/map-hero.jpg";
 import { RoleNav } from "@/components/rc/RoleNav";
+import { storage } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -177,20 +178,28 @@ function Landing() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              to="/auth"
-              search={{ mode: "signin" }}
-              className="hidden rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline-flex"
-            >
-              Login
-            </Link>
-            <Link
-              to="/auth"
-              search={{ mode: "signup" }}
-              className="hidden rounded-full border border-border px-3 py-2 text-xs font-semibold hover:bg-muted sm:inline-flex"
-            >
-              Register
-            </Link>
+            {!storage.getUser() ? (
+              <>
+                <Link
+                  to="/auth"
+                  search={{ mode: "signin" }}
+                  className="hidden rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline-flex"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/auth"
+                  search={{ mode: "signup" }}
+                  className="hidden rounded-full border border-border px-3 py-2 text-xs font-semibold hover:bg-muted sm:inline-flex"
+                >
+                  Register
+                </Link>
+              </>
+            ) : (
+              <span className="hidden text-[10px] font-bold uppercase tracking-tight text-muted-foreground sm:inline-flex mr-2">
+                Hi, {storage.getUser()?.name}
+              </span>
+            )}
             <Link
               to="/ride"
               className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-transform active:scale-95"
