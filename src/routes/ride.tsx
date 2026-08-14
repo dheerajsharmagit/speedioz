@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
@@ -155,6 +155,7 @@ function computeEtaMinutes(
 
 
 function RidePage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
@@ -213,7 +214,11 @@ function RidePage() {
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     const user = storage.getUser();
-    if (user) userIdRef.current = user.id;
+    if (!user) {
+      navigate({ to: "/auth" });
+      return;
+    }
+    userIdRef.current = user.id;
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("unavailable");
