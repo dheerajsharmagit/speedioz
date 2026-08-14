@@ -1,10 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
 
-type Role = "rider";
-const ROLE_KEY = "rh-pending-role";
+type Role = "CUSTOMER";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
@@ -15,28 +14,15 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — RIDEHER" },
-      { name: "description", content: "Sign in as a customer or captain with Google or email." },
+      { name: "description", content: "Sign in to RIDEHER with Google or email." },
     ],
   }),
   component: AuthPage,
 });
 
-function destFor(role: Role) {
-  return "/ride";
-}
-
-async function applyRole(role: Role) {
-  try {
-    await supabase.auth.updateUser({ data: { role } });
-  } catch (e) {
-    console.warn("updateUser role failed", e);
-  }
-}
-
 function AuthPage() {
   const navigate = useNavigate();
   const { mode: initialMode } = Route.useSearch();
-  const [role] = useState<Role>("rider");
   const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,36 +30,37 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user || data.user.is_anonymous) return;
-      const existing = (data.user.user_metadata?.role as Role | undefined) ?? undefined;
-      const pending = (typeof window !== "undefined" ? window.localStorage.getItem(ROLE_KEY) : null) as Role | null;
-      const finalRole: Role = existing ?? pending ?? "rider";
-      if (!existing) await applyRole(finalRole);
-      if (pending) window.localStorage.removeItem(ROLE_KEY);
-      navigate({ to: destFor(finalRole) });
-    });
+    const user = storage.getUser();
+    if (user) {
+      navigate({ to: "/ride" });
+    }
   }, [navigate]);
 
   async function handleGoogle() {
     setError(null);
     setLoading(true);
     try {
-      window.localStorage.setItem(ROLE_KEY, role);
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin + "/auth",
       });
-      if (result.error) {
-        setError(result.error.message ?? "Google sign-in failed");
-        setLoading(false);
-        return;
+      
+      // Lovable auth will redirect. After redirect back to /auth, 
+      // we need to handle the credential if it's in the URL or session.
+      // However, the standard flow in the provided docs is to send the Google ID token.
+      // For web, if we use Supabase OAuth, the user is already signed into Supabase.
+      // We might need to get the session and then call our backend.
+      
+      if (result.error) throw result.error;
+      
+      // If we are already signed in to Supabase, we get the token and sign up to our backend
+      const { data: { session } } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
+      if (session?.access_token) {
+        const authRes = await authApi.signupGoogle(session.access_token);
+        storage.saveAuth(authRes);
+        navigate({ to: "/ride" });
       }
-      if (result.redirected) return;
-      await applyRole(role);
-      window.localStorage.removeItem(ROLE_KEY);
-      navigate({ to: destFor(role) });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed");
+    } catch (e: any) {
+      setError(e.message || "Google sign-in failed");
       setLoading(false);
     }
   }
@@ -83,26 +70,22 @@ function AuthPage() {
     setError(null);
     setLoading(true);
     try {
+      let authRes;
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        authRes = await authApi.signup({
           email,
           password,
-          options: {
-            emailRedirectTo: window.location.origin + "/auth",
-            data: { role },
-          },
+          name: email.split("@")[0], // Placeholder
+          gender: "FEMALE",
+          role: "CUSTOMER"
         });
-        if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        authRes = await authApi.login({ email, password });
       }
-      const { data } = await supabase.auth.getUser();
-      const stored = (data.user?.user_metadata?.role as Role | undefined) ?? role;
-      if (!data.user?.user_metadata?.role) await applyRole(role);
-      navigate({ to: destFor(stored) });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Authentication failed");
+      storage.saveAuth(authRes);
+      navigate({ to: "/ride" });
+    } catch (e: any) {
+      setError(e.error?.message || e.message || "Authentication failed");
     } finally {
       setLoading(false);
     }

@@ -1,12 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { supabase } from "@/integrations/supabase/client";
+import { storage, rideApi } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
-import { ensureAnonSession } from "@/lib/anon-session";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 
@@ -156,6 +155,7 @@ function computeEtaMinutes(
 
 
 function RidePage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<UiStep>("destination");
   const [selected, setSelected] = useState("bike");
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
@@ -213,7 +213,12 @@ function RidePage() {
 
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
-    ensureAnonSession().then((uid) => { userIdRef.current = uid; }).catch((e) => console.error("anon session failed", e));
+    const user = storage.getUser();
+    if (!user) {
+      navigate({ to: "/auth" });
+      return;
+    }
+    userIdRef.current = user.id;
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("unavailable");
@@ -248,37 +253,30 @@ function RidePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
-
-
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
   const fare = vehicle.price + (useSmartRoute ? 0 : 8);
   const smartSavings = 12;
 
-  // Subscribe to this ride's lifecycle
+  // Poll for ride updates since we're using external API
   useEffect(() => {
     if (!ride) return;
-    const channel = supabase
-      .channel(`ride-${ride.id}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rides", filter: `id=eq.${ride.id}` },
-        (payload) => {
-          const next = payload.new as Ride;
-          setRide(next);
-          setStep(stepFromStatus(next.status as RideStatus));
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "ride_locations", filter: `ride_id=eq.${ride.id}` },
-        (payload) => {
-          const row = payload.new as { lat: number; lng: number };
-          setCaptainPos({ lat: row.lat, lng: row.lng });
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const updatedRide = await rideApi.get(ride.id);
+        setRide(updatedRide);
+        setStep(stepFromStatus(updatedRide.status as RideStatus));
+        
+        // In a real app, we'd also get captain location from a separate endpoint or ride object
+        if (updatedRide.captainLocation) {
+           setCaptainPos(updatedRide.captainLocation);
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
   }, [ride?.id]);
 
   // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
@@ -333,35 +331,23 @@ function RidePage() {
     if (!dest) return;
     setCreating(true);
     try {
-      const uid = userIdRef.current || (await ensureAnonSession());
-      userIdRef.current = uid;
-      const { data, error } = await supabase
-        .from("rides")
-        .insert({
-          rider_user_id: uid,
-          rider_device_id: deviceIdRef.current,
-          pickup_label: pickup.label,
-          pickup_lat: pickup.lat,
-          pickup_lng: pickup.lng,
-          drop_label: dest.addr,
-          drop_lat: dest.lat,
-          drop_lng: dest.lng,
-          vehicle_type: selected,
-          fare_inr: fare,
-          otp: generateOtp(),
-          use_smart_route: useSmartRoute,
-          smart_route_savings_min: useSmartRoute ? smartSavings : 0,
-          payment_method: payment,
-          status: "searching",
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await rideApi.create({
+        pickup_label: pickup.label,
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        drop_label: dest.addr,
+        drop_lat: dest.lat,
+        drop_lng: dest.lng,
+        vehicle_type: selected,
+        fare_inr: fare,
+        use_smart_route: useSmartRoute,
+        payment_method: payment,
+      });
       setRide(data as Ride);
       setStep("searching");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Couldn't create ride. Try again.");
+      alert(e.error?.message || "Couldn't create ride. Try again.");
     } finally {
       setCreating(false);
     }
@@ -369,7 +355,7 @@ function RidePage() {
 
   async function cancelSearch() {
     if (ride) {
-      await supabase.from("rides").update({ status: "cancelled" }).eq("id", ride.id);
+      await rideApi.updateStatus(ride.id, "cancelled");
     }
     setRide(null);
     setEncodedPolyline("");
@@ -382,15 +368,15 @@ function RidePage() {
 
   async function simulateArrivalAtPickup() {
     if (!ride) return;
-    await supabase.from("rides").update({ status: "in_progress" }).eq("id", ride.id);
+    await rideApi.updateStatus(ride.id, "in_progress");
   }
   async function simulateCompleted() {
     if (!ride) return;
-    await supabase.from("rides").update({ status: "completed" }).eq("id", ride.id);
+    await rideApi.updateStatus(ride.id, "completed");
   }
   async function submitRating() {
     if (!ride) return;
-    await supabase.from("rides").update({ status: "rated", rating, tip_inr: tip }).eq("id", ride.id);
+    await rideApi.rate(ride.id, { rating, tip_inr: tip });
     // reset
     setRide(null);
     setDest(null);
@@ -1195,10 +1181,10 @@ function useCaptainToPickup(ride: Ride) {
     const t = setInterval(async () => {
       i++;
       const pos = pointAt(path, Math.min(i / steps, 1));
-      await supabase.from("ride_locations").insert({ ride_id: ride.id, lat: pos.lat, lng: pos.lng });
+      await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
       if (i >= steps) {
         clearInterval(t);
-        await supabase.from("rides").update({ status: "arriving" }).eq("id", ride.id);
+        await rideApi.updateStatus(ride.id, "arriving");
       }
     }, 1200);
     return () => clearInterval(t);
@@ -1283,7 +1269,7 @@ function useCaptainDriving(ride: Ride) {
         interval = setInterval(async () => {
           i++;
           const pos = pointAt(path, Math.min(i / steps, 1));
-          await supabase.from("ride_locations").insert({ ride_id: ride.id, lat: pos.lat, lng: pos.lng });
+          await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
           if (i >= steps && interval) {
             clearInterval(interval);
           }

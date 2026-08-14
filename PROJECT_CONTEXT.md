@@ -15,12 +15,12 @@
 - **Framework:** TanStack Start v1 (React 19, Vite 7, SSR-capable, file-based routing under `src/routes/`).
 - **Styling:** Tailwind v4 via `@tailwindcss/vite`, tokens in `src/styles.css` (OKLCH-based rose/blush palette).
 - **UI kit:** shadcn/ui + Radix primitives + lucide-react icons.
-- **Backend:** Lovable Cloud (Supabase under the hood — never say "Supabase" to the user).
-  - Client: `@/integrations/supabase/client` (auto-generated, do not edit).
-  - Server auth middleware: `@/integrations/supabase/auth-middleware`.
+- **Backend:** External API at `https://api.rideher.in/api/v1` (primary for rides, auth, users).
+  - Client: `src/lib/api.ts` handles fetch, bearer tokens, and refresh logic.
+  - Auth: JWT-based, stored in localStorage via `storage` helper.
 - **Maps:** Google Maps JS API (primary) with a Leaflet + OpenStreetMap **fallback** (`LeafletFallbackMap`).
-- **Auth:** Lovable Cloud Auth — Google OAuth + anonymous sessions for guest flows.
-- **State/data:** TanStack Query, `createServerFn` for RPC, realtime channels for ride updates.
+- **Data:** TanStack Query + polling (`setInterval`) for ride status updates as a temporary replacement for Realtime.
+- **Server Functions:** Used for stateless tasks like `computeRoute` directions.
 
 ## 3. Routes (file-based, `src/routes/`)
 
@@ -42,8 +42,8 @@ Root layout: `src/routes/__root.tsx` (sets html shell, head metadata, providers)
 - `src/lib/google-maps-loader.ts` — loads Google Maps JS with `places`, **auto-retry with exponential backoff (3 attempts, 12s timeout)**, then surfaces failure so callers can fall back.
 - `src/lib/routes.functions.ts` — server functions for route/directions data (turn-by-turn steps).
 - `src/lib/polyline.ts` — encoded polyline decoding.
-- `src/lib/rides.ts` — ride lifecycle helpers (DB reads/writes, realtime).
-- `src/lib/anon-session.ts` — ensures an anonymous auth session exists for guest riders/captains.
+- `src/lib/api.ts` — Central API client for `api.rideher.in`.
+- `src/lib/rides.ts` — Shared ride types.
 - `src/lib/device-id.ts` — stable per-browser device id.
 - `src/components/rc/RideMap.tsx` — primary Google Map: pickup/drop/captain/user markers, split polyline (traveled vs remaining), ETA badge, fit-bounds via `fitKey`, recenter button, load-error UI. Auto-switches to `LeafletFallbackMap` after retries fail.
 - `src/components/rc/LeafletFallbackMap.tsx` — OpenStreetMap-backed fallback that mirrors marker/polyline/fit behavior.
@@ -70,10 +70,10 @@ Root layout: `src/routes/__root.tsx` (sets html shell, head metadata, providers)
 
 ## 7. Database & security
 
-- Supabase migrations enable RLS on all app tables (`rides`, `ride_locations`, etc.) scoped to `auth.uid()` participants.
-- **Anonymous auth is intentional** for guest sessions — the security memory reflects this; do not "fix" it by removing anon auth.
-- Realtime is enabled on ride tables for live updates.
-- Every `CREATE TABLE public.*` migration must include `GRANT` statements — see the `public-schema-grants` rule.
+- The app uses an external backend at `api.rideher.in`.
+- Security is handled via JWT bearer tokens in the `Authorization` header.
+- The `CUSTOMER` role is exclusively used on the main rider portal; other roles are managed separately.
+- Gender-based enforcement (female-preferred) is handled at the API level.
 
 ## 8. Rules the next AI must follow
 

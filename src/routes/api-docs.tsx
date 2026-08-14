@@ -43,7 +43,7 @@ function ApiDocsPage() {
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Developer</p>
             <h1 className="mt-1 text-4xl font-extrabold tracking-tight">API Reference</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              The endpoints the RIDEHER frontend talks to — the <code className="font-mono text-xs">computeRoute</code> server function plus the Lovable Cloud Data API tables (<code className="font-mono text-xs">rides</code>, <code className="font-mono text-xs">ride_locations</code>, <code className="font-mono text-xs">community_routes</code>). All ride tables are RLS-scoped to the participants.
+              The endpoints the RIDEHER frontend talks to — the <code className="font-mono text-xs">computeRoute</code> server function plus the production API endpoints at <code className="font-mono text-xs">api.rideher.in/api/v1</code>. All ride tables are scoped to the participants via bearer authentication.
             </p>
           </div>
           <a
