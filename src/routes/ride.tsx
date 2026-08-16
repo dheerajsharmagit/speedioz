@@ -304,7 +304,11 @@ function RidePage() {
 
   // Compute polyline when destination is picked
   useEffect(() => {
-    if (!dest) return;
+    if (!dest) {
+      setEncodedPolyline("");
+      setRouteSteps([]);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -316,7 +320,7 @@ function RidePage() {
           },
         });
         if (!cancelled) {
-          setEncodedPolyline(res.encodedPolyline);
+          setEncodedPolyline(res.encodedPolyline || "");
           setRouteSteps(res.steps ?? []);
           setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
         }
@@ -325,7 +329,7 @@ function RidePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [dest, selected]);
+  }, [dest.lat, dest.lng, pickup.lat, pickup.lng, selected]);
 
   async function createRide() {
     if (!dest) return;
