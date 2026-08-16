@@ -128,6 +128,7 @@ function stepFromStatus(status: RideStatus): UiStep {
     case "in_progress": return "inprogress";
     case "completed": return "completed";
     case "rated": return "rating";
+    case "rating": return "rating";
     default: return "searching";
   }
 }

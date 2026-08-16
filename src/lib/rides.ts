@@ -4,11 +4,12 @@ export type RideStatus =
   | "vehicle"
   | "confirm"
   | "searching"
-  | "matched"
+  | "accepted"
   | "arriving"
-  | "inprogress"
+  | "in_progress"
   | "completed"
-  | "rating";
+  | "rating"
+  | "rated";
 
 export interface Ride {
   id: string;
@@ -23,6 +24,7 @@ export interface Ride {
   fare_inr: number;
   status: RideStatus;
   otp: string;
+  use_smart_route?: boolean;
   captain_name?: string;
   captain_phone?: string;
   captain_lat?: number;
@@ -30,16 +32,24 @@ export interface Ride {
   captain_plate?: string;
   captain_vehicle?: string;
   captain_avatar?: string;
+  captain_rating?: number;
   created_at: string;
 }
 
 export interface CommunityRoute {
   id: string;
-  name: string;
-  description: string;
-  time_saved_mins: number;
+  title: string;
+  from_label: string;
+  from_lat: number;
+  from_lng: number;
+  to_label: string;
+  to_lat: number;
+  to_lng: number;
+  savings_min: number;
   confidence_score: number;
   safety_score: number;
+  ai_confidence: number;
+  verified_by: number;
   encoded_polyline: string;
   tags: string[];
 }
