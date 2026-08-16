@@ -111,15 +111,52 @@ export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyli
     const L = LRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
-    const { polyline, markers } = stateRef.current;
-    polyRef.current?.remove();
-    polyRef.current = null;
+    const { polyline, markers, captain } = stateRef.current;
+    
+    // Clear old polylines
+    if ((map as any)._ridePolylines) {
+      (map as any)._ridePolylines.forEach((p: any) => p.remove());
+    }
+    (map as any)._ridePolylines = [];
+
     if (polyline) {
-      const pts = decodePolyline(polyline).map((p) => [p.lat, p.lng] as [number, number]);
-      if (pts.length > 1) {
-        polyRef.current = L.polyline(pts, { color: markers.routeStroke, weight: 5, opacity: 0.95 }).addTo(map);
+      const path = decodePolyline(polyline);
+      if (path.length > 1) {
+        // Find split point for traveled vs remaining
+        const splitIdx = captain ? nearestIndex(path, captain) : 0;
+        const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
+        const remaining = path.slice(Math.max(0, splitIdx));
+
+        if (traveled.length > 1) {
+          const tPoly = L.polyline(
+            traveled.map((p) => [p.lat, p.lng] as [number, number]),
+            { color: markers.routeTraveled, weight: 4, opacity: 0.75, dashArray: "5, 8" }
+          ).addTo(map);
+          (map as any)._ridePolylines.push(tPoly);
+        }
+        
+        const rPoly = L.polyline(
+          remaining.map((p) => [p.lat, p.lng] as [number, number]),
+          { color: markers.routeStroke, weight: 6, opacity: 0.95 }
+        ).addTo(map);
+        (map as any)._ridePolylines.push(rPoly);
       }
     }
+  }
+
+  function nearestIndex(path: LatLng[], p: LatLng): number {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < path.length; i++) {
+      const dx = path[i].lat - p.lat;
+      const dy = path[i].lng - p.lng;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
   }
 
   function applyBounds() {
@@ -131,14 +168,14 @@ export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyli
     if (captain) pts.push([captain.lat, captain.lng]);
     if (polyline) for (const p of decodePolyline(polyline)) pts.push([p.lat, p.lng]);
     if (pts.length >= 2 && (pickup.lat !== drop.lat || pickup.lng !== drop.lng)) {
-      map.fitBounds(L.latLngBounds(pts), { padding: [60, 40] });
+      map.fitBounds(L.latLngBounds(pts), { padding: [60, 60] });
     } else {
       map.setView([pickup.lat, pickup.lng], 15);
     }
   }
 
   useEffect(() => { if (readyRef.current) applyMarkers(); }, [pickup, drop, captain, userLocation, markers]);
-  useEffect(() => { if (readyRef.current) applyPolyline(); }, [polyline, markers]);
+  useEffect(() => { if (readyRef.current) applyPolyline(); }, [polyline, markers, captain]);
   useEffect(() => { if (readyRef.current) applyBounds(); }, [pickup, drop, captain, polyline, fitKey]);
 
   return (

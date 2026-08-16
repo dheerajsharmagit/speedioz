@@ -128,6 +128,7 @@ function stepFromStatus(status: RideStatus): UiStep {
     case "in_progress": return "inprogress";
     case "completed": return "completed";
     case "rated": return "rating";
+    case "rating": return "rating";
     default: return "searching";
   }
 }
@@ -304,7 +305,11 @@ function RidePage() {
 
   // Compute polyline when destination is picked
   useEffect(() => {
-    if (!dest) return;
+    if (!dest) {
+      setEncodedPolyline("");
+      setRouteSteps([]);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -316,7 +321,7 @@ function RidePage() {
           },
         });
         if (!cancelled) {
-          setEncodedPolyline(res.encodedPolyline);
+          setEncodedPolyline(res.encodedPolyline || "");
           setRouteSteps(res.steps ?? []);
           setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
         }
@@ -325,7 +330,7 @@ function RidePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [dest, selected]);
+  }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, selected]);
 
   async function createRide() {
     if (!dest) return;
@@ -382,8 +387,8 @@ function RidePage() {
     setDest(null);
     setDestQuery("");
     setEncodedPolyline("");
-    setRouteSteps([]);
     setApproachPolyline("");
+    setRouteSteps([]);
     approachFetchedRef.current = null;
     setCaptainPos(null);
     setRating(0);
@@ -1145,7 +1150,7 @@ function MatchedStep({ ride }: { ride: Ride }) {
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">Share OTP on pickup</p>
             <div className="mt-2 flex gap-2">
-              {ride.otp.split("").map((d, i) => (
+              {ride.otp.split("").map((d: string, i: number) => (
                 <span key={i} className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary">
                   {d}
                 </span>
