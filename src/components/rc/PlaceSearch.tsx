@@ -100,7 +100,7 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
           if (!sessionTokenRef.current) {
             sessionTokenRef.current = new places.AutocompleteSessionToken();
           }
-          const request: Record<string, unknown> = {
+          const request: any = {
             input: value,
             sessionToken: sessionTokenRef.current,
           };
@@ -112,17 +112,18 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
           }
           const { suggestions: rawSuggestions } =
             await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          mapped = (rawSuggestions ?? []).map((s: any) => {
-            const p = s.placePrediction;
-            return {
-              placeId: p?.placeId ?? "",
-              primary: p?.mainText?.text ?? p?.text?.text ?? "",
-              secondary: p?.secondaryText?.text ?? "",
-              raw: p,
-              source: "google" as const,
-            };
-          }).filter((s: Suggestion) => s.placeId);
+          mapped = (rawSuggestions ?? [])
+            .map((s: any) => {
+              const p = s.placePrediction;
+              return {
+                placeId: p?.placeId ?? "",
+                primary: p?.mainText?.text ?? p?.text?.text ?? "",
+                secondary: p?.secondaryText?.text ?? "",
+                raw: p,
+                source: "google" as const,
+              };
+            })
+            .filter((s: Suggestion) => s.placeId);
           if (myReq === reqIdRef.current) setUsingFallback(false);
         } catch (googleErr) {
           console.warn("Google Places unavailable, falling back to OSM", googleErr);
@@ -137,7 +138,7 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       } finally {
         if (myReq === reqIdRef.current) setLoading(false);
       }
-    }, 250);
+    }, 400); // Increased debounce to be safer on slow networks
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };

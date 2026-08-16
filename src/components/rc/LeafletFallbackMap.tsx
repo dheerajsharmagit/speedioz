@@ -168,7 +168,7 @@ export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyli
     if (captain) pts.push([captain.lat, captain.lng]);
     if (polyline) for (const p of decodePolyline(polyline)) pts.push([p.lat, p.lng]);
     if (pts.length >= 2 && (pickup.lat !== drop.lat || pickup.lng !== drop.lng)) {
-      map.fitBounds(L.latLngBounds(pts), { padding: [60, 40] });
+      map.fitBounds(L.latLngBounds(pts), { padding: [60, 60] });
     } else {
       map.setView([pickup.lat, pickup.lng], 15);
     }
