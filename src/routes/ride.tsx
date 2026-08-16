@@ -329,7 +329,7 @@ function RidePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [dest.lat, dest.lng, pickup.lat, pickup.lng, selected]);
+  }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, selected]);
 
   async function createRide() {
     if (!dest) return;
@@ -1149,7 +1149,7 @@ function MatchedStep({ ride }: { ride: Ride }) {
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">Share OTP on pickup</p>
             <div className="mt-2 flex gap-2">
-              {ride.otp.split("").map((d, i) => (
+              {ride.otp.split("").map((d: string, i: number) => (
                 <span key={i} className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary">
                   {d}
                 </span>
