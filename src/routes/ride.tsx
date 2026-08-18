@@ -171,6 +171,8 @@ function RidePage() {
   const [useSmartRoute, setUseSmartRoute] = useState(true);
   const [ride, setRide] = useState<Ride | null>(null);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
   const [approachPolyline, setApproachPolyline] = useState<string>("");
   const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -308,10 +310,13 @@ function RidePage() {
     if (!dest) {
       setEncodedPolyline("");
       setRouteSteps([]);
+      setRouteError(null);
       return;
     }
     let cancelled = false;
     (async () => {
+      setRouteLoading(true);
+      setRouteError(null);
       try {
         const res = await computeRoute({
           data: {
@@ -321,12 +326,20 @@ function RidePage() {
           },
         });
         if (!cancelled) {
+          if (!res.encodedPolyline) {
+            setRouteError("No route found between these points.");
+          }
           setEncodedPolyline(res.encodedPolyline || "");
           setRouteSteps(res.steps ?? []);
           setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
         }
       } catch (e) {
-        console.warn("route fetch failed", e);
+        if (!cancelled) {
+          console.warn("route fetch failed", e);
+          setRouteError("Failed to calculate route. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setRouteLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -490,6 +503,8 @@ function RidePage() {
             captain={captainPos}
             userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
+            routeLoading={routeLoading}
+            routeError={routeError}
             fitKey={step}
             recenterKey={recenterKey}
             recenterTarget={userLocation ?? mapPickup}
