@@ -22,6 +22,8 @@ interface Props {
   polyline?: string;
   className?: string;
   fitKey?: string;
+  routeLoading?: boolean;
+  routeError?: string | null;
 }
 
 function makeDot(L: LeafletNS, color: string, stroke: string, size = 16) {
@@ -29,7 +31,17 @@ function makeDot(L: LeafletNS, color: string, stroke: string, size = 16) {
   return L.divIcon({ html, className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
 }
 
-export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyline, className, fitKey }: Props) {
+export function LeafletFallbackMap({ 
+  pickup, 
+  drop, 
+  captain, 
+  userLocation, 
+  polyline, 
+  className, 
+  fitKey,
+  routeLoading,
+  routeError 
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const LRef = useRef<LeafletNS | null>(null);
   const mapRef = useRef<LMap | null>(null);
@@ -184,6 +196,29 @@ export function LeafletFallbackMap({ pickup, drop, captain, userLocation, polyli
       <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-background/90 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground shadow-sm">
         Fallback map
       </div>
+
+      {/* Loading State Overlay */}
+      {routeLoading && (
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-background/90 px-6 py-4 shadow-xl border border-border/50">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span className="text-xs font-semibold tracking-wide text-foreground/80">Calculating route...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error State Overlay */}
+      {routeError && (
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-background/95 px-6 py-4 shadow-xl border border-destructive/20 max-w-[80%] text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <span className="text-xl">!</span>
+            </div>
+            <span className="text-sm font-bold text-foreground">Route Unavailable</span>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{routeError}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

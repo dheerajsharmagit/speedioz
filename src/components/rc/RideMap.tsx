@@ -32,6 +32,8 @@ interface RideMapProps {
   /** Bump this number to smoothly pan the map to `recenterTarget`. */
   recenterKey?: number;
   recenterTarget?: LatLng | null;
+  routeLoading?: boolean;
+  routeError?: string | null;
 }
 
 function nearestIndex(path: LatLng[], p: LatLng): number {
@@ -46,7 +48,19 @@ function nearestIndex(path: LatLng[], p: LatLng): number {
   return best;
 }
 
-export function RideMap({ pickup, drop, captain, userLocation, polyline, className, fitKey, recenterKey, recenterTarget }: RideMapProps) {
+export function RideMap({ 
+  pickup, 
+  drop, 
+  captain, 
+  userLocation, 
+  polyline, 
+  className, 
+  fitKey, 
+  recenterKey, 
+  recenterTarget,
+  routeLoading,
+  routeError
+}: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const pickupMarkerRef = useRef<GoogleMarker | null>(null);
@@ -352,6 +366,8 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
             polyline={polyline}
             className="absolute inset-0"
             fitKey={fitKey}
+            routeLoading={routeLoading}
+            routeError={routeError}
           />
         </Suspense>
 
@@ -371,6 +387,38 @@ export function RideMap({ pickup, drop, captain, userLocation, polyline, classNa
   return (
     <div className={className ?? "relative h-full w-full"}>
       <div ref={containerRef} className="absolute inset-0 bg-muted" />
+      
+      {/* Loading State Overlays */}
+      {routeLoading && (
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-background/90 px-6 py-4 shadow-xl border border-border/50 animate-in fade-in zoom-in duration-300">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span className="text-xs font-semibold tracking-wide text-foreground/80">Calculating route...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error State Overlay */}
+      {routeError && (
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-background/95 px-6 py-4 shadow-xl border border-destructive/20 animate-in fade-in zoom-in duration-300 max-w-[80%] text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <span className="text-xl">!</span>
+            </div>
+            <span className="text-sm font-bold text-foreground">Route Unavailable</span>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{routeError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State / Prompt */}
+      {!polyline && !routeLoading && !routeError && pickup.lat === drop.lat && pickup.lng === drop.lng && (
+        <div className="absolute top-4 left-1/2 z-[1000] -translate-x-1/2 pointer-events-none">
+          <div className="rounded-full bg-background/95 px-4 py-2 shadow-lg border border-border/50 animate-in slide-in-from-top-4 duration-500">
+             <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">Choose a destination to see the route</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
