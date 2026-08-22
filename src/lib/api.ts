@@ -166,8 +166,8 @@ export const authApi = {
 
 // Ride methods
 export const rideApi = {
-  create: (data: any) => api<any>('/rides', { method: 'POST', body: JSON.stringify(data) }),
-  get: (id: string) => api<any>(`/rides/${id}`),
+  create: (data: any) => api<any>('/rides/request', { method: 'POST', body: JSON.stringify(data) }),
+  get: (id: string) => api<any>(`/rides/${id}/booking-details`),
   updateStatus: (id: string, status: string) => api(`/rides/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   rate: (id: string, data: any) => api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
   updateLocation: (id: string, lat: number, lng: number) => api(`/rides/${id}/location`, { method: 'POST', body: JSON.stringify({ lat, lng }) }),
