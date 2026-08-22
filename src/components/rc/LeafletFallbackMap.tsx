@@ -158,7 +158,6 @@ export function LeafletFallbackMap({
         ).addTo(map);
         (map as any)._ridePolylines.push(rPoly);
       }
-    }
   }
 
   function nearestIndex(path: LatLng[], p: LatLng): number {
