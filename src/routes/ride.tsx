@@ -808,7 +808,7 @@ Actually modify the existing code and test the complete booking flow.</div>
           )}
 
           {step === "completed" && ride && (
-            <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} />
+            <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} ride={ride} />
           )}
 
           {step === "rating" && ride && (
