@@ -799,7 +799,7 @@ Actually modify the existing code and test the complete booking flow.</div>
               title="Captain arriving"
               subtitle={`${etaMinutes ?? "—"} min · ${
                 distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
-              } to pickup${ride.captain_name ? ` · ${ride.captain_name}` : ""}`}
+              } to pickup${ride.captain?.name ? ` · ${ride.captain.name}` : ""}`}
               ride={ride}
               onNext={() => {}}
               ctaLabel="Live tracking"
