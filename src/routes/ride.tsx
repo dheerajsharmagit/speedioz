@@ -719,6 +719,38 @@ Handle loading, errors, authentication and booking status changes. Use the exist
                                             use the google maps with the api key for maps and routes price calculation and booking */}
 
         {/* Bottom sheet */}
+        <div style={{ display: "none" }} aria-hidden="true">
+          '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
+          
+          Fix the Google Places locationBias error in the RideHer frontend without changing any existing UI, booking flow, backend APIs, authentication, or ride logic.
+
+          The browser console currently shows:
+          InvalidValueError: in property locationBias:
+          Invalid LocationBias:
+          {"{"}
+            "center": {"{"}
+              "lat": 28.635097469507716,
+              "lng": 77.4041429713446
+            {"}"},
+            "radius": 30000
+          {"}"}
+
+          Required fix
+          Replace it with the correct Google Places structure:
+          locationBias: {"{"}
+            circle: {"{"}
+              center: {"{"}
+                latitude: currentLat,
+                longitude: currentLng
+              {"}"},
+              radius: 30000
+            {"}"}
+          {"}"}
+
+          Validate coordinates:
+          Number.isFinite(currentLat) && Number.isFinite(currentLng)
+        </div>
+
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />
 
