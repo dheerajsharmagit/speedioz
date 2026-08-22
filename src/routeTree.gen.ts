@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RoutesRouteImport } from './routes/routes'
 import { Route as RideRouteImport } from './routes/ride'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as CaptainRouteImport } from './routes/captain'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -32,6 +33,11 @@ const RoutesRoute = RoutesRouteImport.update({
 const RideRoute = RideRouteImport.update({
   id: '/ride',
   path: '/ride',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
   '/onboarding': typeof OnboardingRoute
+  '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
   '/onboarding': typeof OnboardingRoute
+  '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
   '/onboarding': typeof OnboardingRoute
+  '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
@@ -108,6 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/captain'
     | '/onboarding'
+    | '/profile'
     | '/ride'
     | '/routes'
     | '/settings'
@@ -119,6 +129,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/captain'
     | '/onboarding'
+    | '/profile'
     | '/ride'
     | '/routes'
     | '/settings'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/captain'
     | '/onboarding'
+    | '/profile'
     | '/ride'
     | '/routes'
     | '/settings'
@@ -142,6 +154,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CaptainRoute: typeof CaptainRoute
   OnboardingRoute: typeof OnboardingRoute
+  ProfileRoute: typeof ProfileRoute
   RideRoute: typeof RideRoute
   RoutesRoute: typeof RoutesRoute
   SettingsRoute: typeof SettingsRoute
@@ -168,6 +181,13 @@ declare module '@tanstack/react-router' {
       path: '/ride'
       fullPath: '/ride'
       preLoaderRoute: typeof RideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding': {
@@ -222,6 +242,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CaptainRoute: CaptainRoute,
   OnboardingRoute: OnboardingRoute,
+  ProfileRoute: ProfileRoute,
   RideRoute: RideRoute,
   RoutesRoute: RoutesRoute,
   SettingsRoute: SettingsRoute,
