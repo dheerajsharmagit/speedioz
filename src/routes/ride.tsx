@@ -412,14 +412,6 @@ function RidePage() {
     setStep("confirm");
   }
 
-  async function simulateArrivalAtPickup() {
-    if (!ride) return;
-    await rideApi.updateStatus(ride.id, "in_progress");
-  }
-  async function simulateCompleted() {
-    if (!ride) return;
-    await rideApi.updateStatus(ride.id, "completed");
-  }
   async function submitRating() {
     if (!ride) return;
     await rideApi.rate(ride.id, { rating, tip_inr: tip });
