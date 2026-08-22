@@ -179,12 +179,18 @@ export function RideMap({
     polylineRef.current = null;
     traveledRef.current = null;
     pathRef.current = [];
-    if (!polyline) return;
-
-    const decoded = g.maps.geometry.encoding.decodePath(polyline);
-    if (!decoded || decoded.length === 0) return;
-    const path: LatLng[] = decoded.map((p) => ({ lat: p.lat(), lng: p.lng() }));
-    pathRef.current = path;
+    if (!polyline) {
+      // If no polyline, draw a straight line between pickup and drop as fallback
+      pathRef.current = [pickup, drop];
+    } else {
+      const decoded = g.maps.geometry.encoding.decodePath(polyline);
+      if (!decoded || decoded.length === 0) {
+        pathRef.current = [pickup, drop];
+      } else {
+        pathRef.current = decoded.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+      }
+    }
+    const path = pathRef.current;
 
     const splitIdx = captain ? nearestIndex(path, captain) : 0;
     const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
