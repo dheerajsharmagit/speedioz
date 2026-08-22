@@ -271,7 +271,8 @@ function RidePage() {
     const token = storage.getAccessToken();
     const socket = io("https://api.rideher.in", {
       auth: { token: `Bearer ${token}` },
-      transports: ["websocket"]
+      transports: ["websocket", "polling"],
+      withCredentials: true
     });
 
     socket.on("connect", () => {
