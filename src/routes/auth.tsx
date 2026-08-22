@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
 
-type Role = "CUSTOMER";
-
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): { mode: "signin" | "signup" } => {
     return {
@@ -40,7 +38,7 @@ function AuthPage() {
     }
   }, [navigate]);
 
-  async function handleGoogle() {
+  const handleGoogle = async () => {
     setError(null);
     setLoading(true);
     try {
@@ -48,15 +46,8 @@ function AuthPage() {
         redirect_uri: window.location.origin + "/auth",
       });
       
-      // Lovable auth will redirect. After redirect back to /auth, 
-      // we need to handle the credential if it's in the URL or session.
-      // However, the standard flow in the provided docs is to send the Google ID token.
-      // For web, if we use Supabase OAuth, the user is already signed into Supabase.
-      // We might need to get the session and then call our backend.
-      
       if (result.error) throw result.error;
       
-      // If we are already signed in to Supabase, we get the token and sign up to our backend
       const { data: { session } } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
       if (session?.access_token) {
         const authRes = await authApi.signupGoogle(session.access_token);
@@ -67,7 +58,7 @@ function AuthPage() {
       setError(e.message || "Google sign-in failed");
       setLoading(false);
     }
-  }
+  };
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,13 +93,13 @@ function AuthPage() {
       storage.saveAuth(authRes);
       navigate({ to: "/ride" });
     } catch (e: any) {
+      console.error("Auth error:", e);
       setError(e.error?.message || e.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
   };
 
-  console.log("Rendering AuthPage:", { mode, showOtp, loading });
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background px-6 py-10">
@@ -128,8 +119,6 @@ function AuthPage() {
           </p>
         </div>
 
-
-        <button type="button" onClick={() => console.log("Google clicked")}>Test</button>
         <button
           type="button"
           onClick={handleGoogle}
@@ -146,13 +135,7 @@ function AuthPage() {
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <form 
-          onSubmit={(e) => {
-            console.log("Form submitted event");
-            handleEmail(e);
-          }} 
-          className="space-y-3"
-        >
+        <form onSubmit={handleEmail} className="space-y-3">
           {mode === "signup" && !showOtp && (
             <>
               <input
@@ -241,6 +224,7 @@ function AuthPage() {
         </form>
 
         <button
+          type="button"
           onClick={() => { setError(null); setMode(mode === "signup" ? "signin" : "signup"); setShowOtp(false); }}
           className="mt-6 text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
         >
