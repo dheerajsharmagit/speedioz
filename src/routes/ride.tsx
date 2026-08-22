@@ -123,13 +123,16 @@ type Payment = "upi" | "cash" | "card";
 
 function stepFromStatus(status: RideStatus): UiStep {
   switch (status) {
+    case "destination": return "destination";
+    case "vehicle": return "vehicle";
+    case "confirm": return "confirm";
     case "searching": return "searching";
     case "accepted": return "matched";
     case "arriving": return "arriving";
     case "in_progress": return "inprogress";
     case "completed": return "completed";
-    case "rated": return "rating";
     case "rating": return "rating";
+    case "rated": return "rating";
     default: return "searching";
   }
 }
