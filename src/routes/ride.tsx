@@ -292,12 +292,22 @@ function RidePage() {
     socket.on("ride.created", handleUpdate);
     socket.on("ride.assigned", handleUpdate);
     socket.on("ride.accepted", handleUpdate);
-    socket.on("ride.rejected", handleUpdate);
+    socket.on("ride.rejected", (data: any) => {
+      console.log("Ride rejected by captain:", data);
+      // Backend will find another captain, we just stay in searching step
+      // The ride object might be updated with new status if all captains reject
+      if (data.status) {
+        setStep(stepFromStatus(data.status as RideStatus));
+      }
+    });
     socket.on("ride.arriving", handleUpdate);
     socket.on("ride.arrived", handleUpdate);
     socket.on("ride.started", handleUpdate);
     socket.on("ride.completed", handleUpdate);
-    socket.on("ride.cancelled", handleUpdate);
+    socket.on("ride.cancelled", (data: any) => {
+      handleUpdate(data);
+      alert("Ride was cancelled.");
+    });
 
     // Also listen for captain location updates
     socket.on("captain.location", (loc: { lat: number; lng: number }) => {
