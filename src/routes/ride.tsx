@@ -134,6 +134,7 @@ function stepFromStatus(status: RideStatus): UiStep {
     case "completed": return "completed";
     case "rating": return "rating";
     case "rated": return "rating";
+    case "cancelled": return "cancelled";
     default: return "searching";
   }
 }
