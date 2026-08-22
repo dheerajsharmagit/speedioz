@@ -261,26 +261,49 @@ function RidePage() {
   const fare = vehicle.price + (useSmartRoute ? 0 : 8);
   const smartSavings = 12;
 
-  // Poll for ride updates since we're using external API
+  // Real-time ride updates via Socket.IO
   useEffect(() => {
-    if (!ride) return;
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        const updatedRide = await rideApi.get(ride.id);
-        setRide(updatedRide);
-        setStep(stepFromStatus(updatedRide.status as RideStatus));
-        
-        // In a real app, we'd also get captain location from a separate endpoint or ride object
-        if (updatedRide.captainLocation) {
-           setCaptainPos(updatedRide.captainLocation);
-        }
-      } catch (e) {
-        console.error("Polling error", e);
-      }
-    }, 5000);
+    if (!ride?.id) return;
 
-    return () => clearInterval(pollInterval);
+    const token = storage.getAccessToken();
+    const socket = io("https://api.rideher.in", {
+      auth: { token: `Bearer ${token}` },
+      transports: ["websocket"]
+    });
+
+    socket.on("connect", () => {
+      console.log("Socket connected, joining ride:", ride.id);
+      socket.emit("join-ride", ride.id);
+    });
+
+    const handleUpdate = (updatedRide: any) => {
+      console.log("Ride update received:", updatedRide);
+      setRide(updatedRide);
+      setStep(stepFromStatus(updatedRide.status as RideStatus));
+      
+      if (updatedRide.captain_lat && updatedRide.captain_lng) {
+        setCaptainPos({ lat: updatedRide.captain_lat, lng: updatedRide.captain_lng });
+      }
+    };
+
+    socket.on("ride.created", handleUpdate);
+    socket.on("ride.assigned", handleUpdate);
+    socket.on("ride.accepted", handleUpdate);
+    socket.on("ride.rejected", handleUpdate);
+    socket.on("ride.arriving", handleUpdate);
+    socket.on("ride.arrived", handleUpdate);
+    socket.on("ride.started", handleUpdate);
+    socket.on("ride.completed", handleUpdate);
+    socket.on("ride.cancelled", handleUpdate);
+
+    // Also listen for captain location updates
+    socket.on("captain.location", (loc: { lat: number; lng: number }) => {
+      setCaptainPos(loc);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [ride?.id]);
 
   // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
