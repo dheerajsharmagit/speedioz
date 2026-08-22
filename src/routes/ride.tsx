@@ -1382,9 +1382,9 @@ function CompletedStep({ fare, onNext }: { fare: number; onNext: () => void }) {
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="Distance" value="8.4 km" />
-            <Stat label="Duration" value="22 min" />
-            <Stat label="Saved" value="12 min" accent />
+            <Stat label="Distance" value={ride ? `${(haversineKm({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng})).toFixed(1)} km` : "—"} />
+            <Stat label="Duration" value={ride ? `${computeEtaMinutes({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng}, ride.vehicle_type)} min` : "—"} />
+            <Stat label="Saved" value={ride?.use_smart_route ? "12 min" : "—"} accent />
           </div>
         </div>
       </div>
