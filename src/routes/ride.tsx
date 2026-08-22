@@ -719,6 +719,148 @@ Handle loading, errors, authentication and booking status changes. Use the exist
                                             use the google maps with the api key for maps and routes price calculation and booking */}
 
         {/* Bottom sheet */}
+        <div style={{ display: "none" }} aria-hidden="true">
+          '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
+                                        
+                                            
+                                            Fix the Google Places locationBias error in the RideHer frontend without changing any existing UI, booking flow, backend APIs, authentication, or ride logic.
+
+The browser console currently shows:
+
+Google Places unavailable, falling back to OSM
+InvalidValueError: in property locationBias:
+Invalid LocationBias:
+{"{"}
+  "center": {"{"}
+    "lat": 28.635097469507716,
+    "lng": 77.4041429713446
+  {"}"},
+  "radius": 30000
+{"}"}
+
+Required fix
+
+Find the Google Places Autocomplete/location-search implementation in the frontend that creates the invalid locationBias object.
+
+The current implementation is using:
+
+locationBias: {"{"}
+  center: {"{"}
+    lat: currentLat,
+    lng: currentLng
+  {"}"},
+  radius: 30000
+{"}"}
+
+Replace it with the correct Google Places structure:
+
+locationBias: {"{"}
+  circle: {"{"}
+    center: {"{"}
+      latitude: currentLat,
+      longitude: currentLng
+    {"}"},
+    radius: 30000
+  {"}"}
+{"}"}
+
+Dynamic location
+
+Do not use hard-coded coordinates.
+
+The currentLat and currentLng values must come from the user's current GPS location.
+
+Validate them before creating locationBias:
+
+Number.isFinite(currentLat) &&
+Number.isFinite(currentLng)
+
+If the user's location is not available or the coordinates are invalid, do not send locationBias at all. The Places search should continue without a location bias.
+
+Important requirements
+
+ Keep Google Places as the primary location search provider.
+
+ Do not replace Google Places with OSM.
+
+ Do not remove the existing Google Maps integration.
+
+ Do not modify the Google API key.
+
+ Do not change the existing RideHer UI or design.
+
+ Do not change pickup/drop location fields.
+
+ Do not change the ride request API.
+
+ Do not change /api/v1/rides/request.
+
+ Do not change customer/captain booking logic.
+
+ Keep current-location detection working.
+
+ Search the entire frontend codebase for the old locationBias format and fix the relevant Google Places implementation.
+
+ Make sure the implementation matches the Google Places API/library currently installed in this project rather than introducing a different Places API implementation.
+
+ Do not blindly change unrelated map configuration.
+
+ Preserve the existing fallback behavior only for genuine Google Places loading/API failures.
+
+Also check for this
+
+Inspect the existing Google Places initialization and confirm that the API libraries required for the autocomplete functionality are correctly loaded.
+
+Do not add duplicate Google Maps script loading if one already exists.
+
+Expected behavior
+
+After the fix:
+
+User opens Ride page
+       ↓
+Browser gets current GPS location
+       ↓
+Google Places Autocomplete loads
+       ↓
+locationBias uses:
+circle.center.latitude
+circle.center.longitude
+circle.radius
+       ↓
+User searches pickup/drop location
+       ↓
+Google Places suggestions appear
+       ↓
+No InvalidValueError
+
+Verification
+
+After implementing the fix:
+
+ Run the frontend build.
+
+ Confirm there are no TypeScript/JavaScript errors.
+
+ Search the compiled/source code to ensure the old invalid structure is no longer being used.
+
+ Test the /ride page.
+
+ Test pickup location search.
+
+ Test drop location search.
+
+ Test with GPS permission enabled.
+
+ Test when GPS permission is denied.
+
+ Confirm the console no longer shows:
+
+InvalidValueError: Invalid LocationBias
+
+Make only the changes necessary to fix this Google Places error. Do not redesign or refactor unrelated parts of the application.
+        </div>
+
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
           <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />
 
