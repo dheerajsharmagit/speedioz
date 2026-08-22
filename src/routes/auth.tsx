@@ -91,6 +91,7 @@ function AuthPage() {
         });
       } else {
         authRes = await authApi.login({ email: email.trim(), password });
+        console.log("Login successful:", authRes);
       }
       
       storage.saveAuth(authRes);
