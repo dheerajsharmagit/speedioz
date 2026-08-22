@@ -69,8 +69,9 @@ function AuthPage() {
     }
   }
 
-  async function handleEmail(e?: React.FormEvent) {
-    if (e) e.preventDefault();
+  async function handleEmail(e: React.FormEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     setError(null);
     setLoading(true);
     try {
