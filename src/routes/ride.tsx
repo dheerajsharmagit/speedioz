@@ -482,7 +482,55 @@ function RidePage() {
           <div className="hidden">'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
                                             
-                                            in the previous version the login was working but currently is not working its giving error</div>
+                                            IMPORTANT: CODE IMPLEMENTATION TASK — DO NOT ADD THIS AS UI TEXT.
+
+Update the Customer/Rider app to use the real location-based booking flow.
+
+Implement:
+
+- Detect customer pickup location using GPS.
+
+- Allow customer to search/select pickup and drop locations.
+
+- Send accurate latitude/longitude to the backend when booking.
+
+- Create the ride using the real booking API.
+
+- Show "Finding nearest captain" while dispatch is running.
+
+- Show captain details only after a captain accepts.
+
+- Receive real-time Socket.IO updates for:
+
+  ride.created
+
+  ride.assigned
+
+  ride.accepted
+
+  ride.rejected
+
+  ride.arriving
+
+  ride.arrived
+
+  ride.started
+
+  ride.completed
+
+  ride.cancelled
+
+- If a captain rejects/expires, continue showing the customer that another nearby captain is being searched.
+
+- Once a captain accepts, stop searching and display the assigned captain.
+
+- Show accurate pickup/drop, fare, ETA and ride status from the backend.
+
+Remove mock captain matching and fake ride progression.
+
+The backend must remain the authority for captain selection and assignment.
+
+Actually modify the existing code and test the complete booking flow.</div>
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
