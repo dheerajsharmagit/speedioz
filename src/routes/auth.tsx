@@ -24,6 +24,10 @@ function AuthPage() {
   const navigate = useNavigate();
   const { mode: initialMode } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [showOtp, setShowOtp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,12 +74,24 @@ function AuthPage() {
     setError(null);
     setLoading(true);
     try {
+      if (mode === "signup" && !showOtp) {
+        // Mock OTP send
+        setShowOtp(true);
+        setLoading(false);
+        return;
+      }
+
+      if (mode === "signup" && showOtp && otp !== "1234") {
+        throw new Error("Invalid OTP. Please use 1234.");
+      }
+
       let authRes;
       if (mode === "signup") {
         authRes = await authApi.signup({
           email,
           password,
-          name: email.split("@")[0],
+          name: name || email.split("@")[0],
+          phone: mobile,
           gender: "FEMALE",
           role: "CUSTOMER"
         });
@@ -127,41 +143,95 @@ function AuthPage() {
         </div>
 
         <form onSubmit={handleEmail} className="space-y-3">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password (min 6 chars)"
-            className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
-          />
+          {mode === "signup" && !showOtp && (
+            <>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full Name"
+                className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
+              />
+              <input
+                type="tel"
+                required
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                placeholder="Mobile Number"
+                className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
+              />
+            </>
+          )}
+
+          {(!showOtp || mode === "signin") && (
+            <>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
+              />
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password (min 6 chars)"
+                className="h-14 w-full rounded-2xl bg-muted px-4 text-sm font-semibold outline-none placeholder:text-muted-foreground"
+              />
+            </>
+          )}
+
+          {showOtp && mode === "signup" && (
+            <div className="space-y-3">
+              <p className="text-center text-xs text-muted-foreground">
+                Enter verification code sent to {mobile} (Default: 1234)
+              </p>
+              <input
+                type="text"
+                required
+                maxLength={4}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="Enter 4-digit OTP"
+                className="h-14 w-full text-center tracking-[1em] rounded-2xl bg-muted px-4 text-lg font-bold outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          )}
+
           {error && (
             <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">
               {error}
             </p>
           )}
+          
           <button
             type="submit"
             disabled={loading}
             className="h-14 w-full rounded-2xl bg-secondary text-sm font-bold text-secondary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "…" : mode === "signup"
-              ? "Create customer account"
+              ? (showOtp ? "Verify & Register" : "Send OTP")
               : "Sign in as customer"}
           </button>
+          
+          {showOtp && (
+            <button
+              type="button"
+              onClick={() => setShowOtp(false)}
+              className="w-full text-center text-xs font-semibold text-muted-foreground"
+            >
+              Back to registration
+            </button>
+          )}
         </form>
 
         <button
-          onClick={() => { setError(null); setMode(mode === "signup" ? "signin" : "signup"); }}
+          onClick={() => { setError(null); setMode(mode === "signup" ? "signin" : "signup"); setShowOtp(false); }}
           className="mt-6 text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
         >
           {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
