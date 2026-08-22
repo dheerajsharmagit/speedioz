@@ -108,6 +108,7 @@ function AuthPage() {
     }
   };
 
+  console.log("Rendering AuthPage:", { mode, showOtp, loading });
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background px-6 py-10">
@@ -128,7 +129,9 @@ function AuthPage() {
         </div>
 
 
+        <button type="button" onClick={() => console.log("Google clicked")}>Test</button>
         <button
+          type="button"
           onClick={handleGoogle}
           disabled={loading}
           className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
