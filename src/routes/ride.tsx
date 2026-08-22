@@ -312,7 +312,11 @@ function RidePage() {
   // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
   useEffect(() => {
     if (!ride || !captainPos) return;
-    if (ride.status !== "accepted" && ride.status !== "arriving") return;
+    if (ride.status !== "accepted" && ride.status !== "arriving") {
+      setApproachPolyline("");
+      approachFetchedRef.current = null;
+      return;
+    }
     if (approachFetchedRef.current === ride.id) return;
     approachFetchedRef.current = ride.id;
     (async () => {
