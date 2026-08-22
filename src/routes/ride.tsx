@@ -477,7 +477,7 @@ function RidePage() {
           <div className="hidden">'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
                                             
-                                            create a signup flow for user with name email mobile , where the default otp will be 1234</div>
+                                            use this as the end point POST /api/v1/auth/signup/customer</div>
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
