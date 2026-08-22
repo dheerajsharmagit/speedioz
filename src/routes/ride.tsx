@@ -117,6 +117,7 @@ type UiStep =
   | "arriving"
   | "inprogress"
   | "completed"
+  | "cancelled"
   | "rating";
 
 type Payment = "upi" | "cash" | "card";
