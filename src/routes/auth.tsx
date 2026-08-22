@@ -108,7 +108,6 @@ function AuthPage() {
     }
   };
 
-  console.log("Rendering AuthPage:", { mode, showOtp, loading });
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background px-6 py-10">
@@ -144,7 +143,13 @@ function AuthPage() {
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <form onSubmit={handleEmail} className="space-y-3">
+        <form 
+          onSubmit={(e) => {
+            console.log("Form submitted event");
+            handleEmail(e);
+          }} 
+          className="space-y-3"
+        >
           {mode === "signup" && !showOtp && (
             <>
               <input
