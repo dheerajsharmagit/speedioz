@@ -1257,30 +1257,10 @@ function MatchedStep({ ride }: { ride: Ride }) {
   );
 }
 
-// Simulate the captain closing distance to pickup: emit location pings, then flip status to "arriving".
+// Mock simulation removed as backend is now the authority.
 function useCaptainToPickup(ride: Ride) {
-  useEffect(() => {
-    if (ride.status !== "accepted") return;
-    // Start ~1km away and interpolate toward pickup over ~10 seconds
-    const start = {
-      lat: ride.pickup_lat + 0.008,
-      lng: ride.pickup_lng + 0.010,
-    };
-    const end = { lat: ride.pickup_lat, lng: ride.pickup_lng };
-    const path = [start, end];
-    let i = 0;
-    const steps = 8;
-    const t = setInterval(async () => {
-      i++;
-      const pos = pointAt(path, Math.min(i / steps, 1));
-      await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
-      if (i >= steps) {
-        clearInterval(t);
-        await rideApi.updateStatus(ride.id, "arriving");
-      }
-    }, 1200);
-    return () => clearInterval(t);
-  }, [ride.id, ride.status]);
+  // Logic replaced by Socket.IO updates
+  useEffect(() => {}, [ride.id]);
 }
 
 /* ---------- Generic in-ride status ---------- */
