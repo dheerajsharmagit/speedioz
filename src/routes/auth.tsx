@@ -90,7 +90,7 @@ function AuthPage() {
           role: "CUSTOMER"
         });
       } else {
-        authRes = await authApi.login({ email, password });
+        authRes = await authApi.login({ email: email.trim(), password });
       }
       
       storage.saveAuth(authRes);
