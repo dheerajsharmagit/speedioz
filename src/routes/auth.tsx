@@ -6,9 +6,9 @@ import { lovable } from "@/integrations/lovable";
 type Role = "CUSTOMER";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
+  validateSearch: (search: Record<string, unknown>): { mode: "signin" | "signup" } => {
     return {
-      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : "signin") as "signin" | "signup",
+      mode: (search.mode === "signup" ? "signup" : "signin") as "signin" | "signup",
     };
   },
   head: () => ({
