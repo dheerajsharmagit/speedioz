@@ -11,6 +11,11 @@ export type AuthUser = {
   email: string | null;
   phone: string | null;
   name: string;
+  avatarUrl?: string;
+  memberSince?: string;
+  totalRides?: number;
+  totalRating?: number;
+  emergencyContact?: { name: string; phone: string };
   isSuspended: boolean;
 };
 
@@ -164,4 +169,7 @@ export const userApi = {
   updateMe: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
   getSavedPlaces: () => api<{ data: any[] }>('/users/me/saved-places'),
   addSavedPlace: (data: any) => api<{ data: any }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+  getRideHistory: () => api<{ data: any[] }>('/users/me/rides'),
+  getProfile: () => api<{ user: AuthUser }>('/users/me/profile'),
+  updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me/profile', { method: 'PATCH', body: JSON.stringify(data) }),
 };
