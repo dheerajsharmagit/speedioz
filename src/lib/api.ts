@@ -98,10 +98,20 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (e: any) {
+    console.error(`API fetch error (${path}):`, e);
+    throw new RequestError(503, { 
+      code: 'FETCH_ERROR', 
+      message: 'Unable to connect to RIDEHER server. Please check your internet connection.',
+      requestId: 'internal'
+    });
+  }
 
   if (response.status === 401 && storage.getRefreshToken()) {
     if (!isRefreshing) {
