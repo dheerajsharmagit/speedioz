@@ -1366,7 +1366,7 @@ function useCaptainDriving(ride: Ride) {
 }
 
 /* ---------- Completed ---------- */
-function CompletedStep({ fare, onNext }: { fare: number; onNext: () => void }) {
+function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => void; ride: Ride }) {
   return (
     <>
       <div className="mb-4 px-6">
