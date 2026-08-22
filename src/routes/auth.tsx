@@ -69,13 +69,13 @@ function AuthPage() {
     }
   }
 
-  async function handleEmail(e: React.FormEvent) {
+  const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    
     try {
       if (mode === "signup" && !showOtp) {
-        // Mock OTP send
         setShowOtp(true);
         setLoading(false);
         return;
@@ -98,6 +98,7 @@ function AuthPage() {
       } else {
         authRes = await authApi.login({ email, password });
       }
+      
       storage.saveAuth(authRes);
       navigate({ to: "/ride" });
     } catch (e: any) {
@@ -105,7 +106,7 @@ function AuthPage() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
