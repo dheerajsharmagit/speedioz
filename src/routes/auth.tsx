@@ -23,7 +23,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { mode: initialMode } = Route.useSearch();
-  const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signup" ? "signup" : "signin");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
@@ -106,8 +106,6 @@ function AuthPage() {
       setLoading(false);
     }
   }
-
-  console.log("AuthPage render:", { mode, showOtp, loading, error });
 
   return (
     <div className="min-h-screen bg-background text-foreground">
