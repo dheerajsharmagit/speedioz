@@ -336,7 +336,11 @@ function RidePage() {
       } catch (e) {
         if (!cancelled) {
           console.warn("route fetch failed", e);
-          setRouteError("Failed to calculate route. Please try again.");
+          // Fallback to simple straight line if API fails
+          setRouteError(null);
+          setEncodedPolyline(""); 
+          setRouteSteps([]);
+          setRouteInfo({ distanceMeters: haversineKm(pickup, dest) * 1000, durationSeconds: (haversineKm(pickup, dest) / 25) * 3600 });
         }
       } finally {
         if (!cancelled) setRouteLoading(false);
