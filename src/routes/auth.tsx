@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
@@ -20,6 +20,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const { mode: initialMode } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [name, setName] = useState("");
@@ -48,10 +49,12 @@ function AuthPage() {
       
       if (result.error) throw result.error;
       
-      const { data: { session } } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
+      const supabaseClient = await import("@/integrations/supabase/client");
+      const { data: { session } } = await supabaseClient.supabase.auth.getSession();
       if (session?.access_token) {
         const authRes = await authApi.signupGoogle(session.access_token);
         storage.saveAuth(authRes);
+        await router.invalidate();
         navigate({ to: "/ride" });
       }
     } catch (e: any) {
@@ -91,6 +94,7 @@ function AuthPage() {
       }
       
       storage.saveAuth(authRes);
+      await router.invalidate();
       navigate({ to: "/ride" });
     } catch (e: any) {
       console.error("Auth error:", e);
