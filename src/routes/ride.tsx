@@ -532,55 +532,29 @@ function RidePage() {
           <div className="hidden">'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
                                             
-                                            IMPORTANT: CODE IMPLEMENTATION TASK — DO NOT ADD THIS AS UI TEXT.
+                                            Implement the customer booking flow in the existing codebase. Do not add text/documentation or mock UI.
 
-Update the Customer/Rider app to use the real location-based booking flow.
+API integration:
 
-Implement:
+POST /api/v1/rides/request — create ride request with pickup/drop coordinates, addresses, vehicle type and payment method.
 
-- Detect customer pickup location using GPS.
+GET /api/v1/rides/:id/booking-details — fetch booking details.
 
-- Allow customer to search/select pickup and drop locations.
+Customer UI:
 
-- Send accurate latitude/longitude to the backend when booking.
+ Show pickup and drop locations.
 
-- Create the ride using the real booking API.
+ Show assigned captain profile, phone and vehicle details.
 
-- Show "Finding nearest captain" while dispatch is running.
+ Show fare and distance.
 
-- Show captain details only after a captain accepts.
+ Show captain's live location on the map.
 
-- Receive real-time Socket.IO updates for:
+ Show booking/confirmation status.
 
-  ride.created
+ Update the screen using real API data.
 
-  ride.assigned
-
-  ride.accepted
-
-  ride.rejected
-
-  ride.arriving
-
-  ride.arrived
-
-  ride.started
-
-  ride.completed
-
-  ride.cancelled
-
-- If a captain rejects/expires, continue showing the customer that another nearby captain is being searched.
-
-- Once a captain accepts, stop searching and display the assigned captain.
-
-- Show accurate pickup/drop, fare, ETA and ride status from the backend.
-
-Remove mock captain matching and fake ride progression.
-
-The backend must remain the authority for captain selection and assignment.
-
-Actually modify the existing code and test the complete booking flow.</div>
+Handle loading, errors, authentication and booking status changes. Use the existing project components and API architecture. Actually modify and connect the code; do not create placeholder/mock functionality.</div>
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
