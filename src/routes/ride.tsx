@@ -324,8 +324,12 @@ function RidePage() {
     });
 
     // Also listen for captain location updates
-    socket.on("captain.location", (loc: { lat: number; lng: number }) => {
-      setCaptainPos(loc);
+    socket.on("captain.location", (loc: any) => {
+      const lat = loc.lat ?? loc.latitude;
+      const lng = loc.lng ?? loc.longitude;
+      if (lat && lng) {
+        setCaptainPos({ lat, lng });
+      }
     });
 
     return () => {
