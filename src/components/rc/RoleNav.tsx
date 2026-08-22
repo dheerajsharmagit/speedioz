@@ -17,6 +17,7 @@ export function RoleNav() {
   const roles = [
     { to: "/", label: "Home" },
     { to: "/ride", label: "Ride" },
+    { to: "/profile", label: "Profile" },
     { to: "/routes", label: "Community" },
     { to: "/settings", label: "Settings" },
     user ? { to: "#logout", label: "Logout", onClick: async () => { await authApi.logout(); window.location.href = "/"; } } : { to: "/auth", label: "Sign in" },
