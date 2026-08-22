@@ -850,6 +850,7 @@ function StepIndicator({ step }: { step: UiStep }) {
     arriving: "06 · Pickup",
     inprogress: "07 · En route",
     completed: "08 · Arrived",
+    cancelled: "08 · Cancelled",
     rating: "09 · Rate",
   };
   return (
