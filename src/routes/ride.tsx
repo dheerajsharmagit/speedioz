@@ -823,6 +823,19 @@ Actually modify the existing code and test the complete booking flow.</div>
             <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} ride={ride} />
           )}
 
+          {step === "cancelled" && (
+            <div className="px-6 pb-12 pt-6 text-center">
+              <h2 className="text-2xl font-extrabold tracking-tight">Ride Cancelled</h2>
+              <p className="mt-2 text-sm text-muted-foreground">The ride has been cancelled.</p>
+              <button
+                onClick={() => { setRide(null); setStep("destination"); }}
+                className="mt-6 h-14 w-full rounded-full bg-primary text-sm font-bold text-secondary shadow-xl transition-transform active:scale-95"
+              >
+                Back to booking
+              </button>
+            </div>
+          )}
+
           {step === "rating" && ride && (
             <RatingStep
               captainName={ride.captain_name ?? "your captain"}
