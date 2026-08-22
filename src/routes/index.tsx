@@ -196,9 +196,17 @@ function Landing() {
                 </Link>
               </>
             ) : (
-              <span className="hidden text-[10px] font-bold uppercase tracking-tight text-muted-foreground sm:inline-flex mr-2">
-                Hi, {storage.getUser()?.name}
-              </span>
+              <Link
+                to="/profile"
+                className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 transition hover:border-primary/40 sm:flex mr-2"
+              >
+                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-[10px] font-black text-primary">{storage.getUser()?.name.charAt(0)}</span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
+                  {storage.getUser()?.name}
+                </span>
+              </Link>
             )}
             <Link
               to="/ride"
