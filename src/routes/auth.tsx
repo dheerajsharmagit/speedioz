@@ -8,7 +8,7 @@ type Role = "CUSTOMER";
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
     return {
-      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : undefined) as "signin" | "signup" | undefined,
+      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : "signin") as "signin" | "signup",
     };
   },
   head: () => ({
