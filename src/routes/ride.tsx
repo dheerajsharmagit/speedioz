@@ -8,6 +8,7 @@ import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
+import { io, Socket } from "socket.io-client";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
@@ -116,19 +117,24 @@ type UiStep =
   | "arriving"
   | "inprogress"
   | "completed"
+  | "cancelled"
   | "rating";
 
 type Payment = "upi" | "cash" | "card";
 
 function stepFromStatus(status: RideStatus): UiStep {
   switch (status) {
+    case "destination": return "destination";
+    case "vehicle": return "vehicle";
+    case "confirm": return "confirm";
     case "searching": return "searching";
     case "accepted": return "matched";
     case "arriving": return "arriving";
     case "in_progress": return "inprogress";
     case "completed": return "completed";
-    case "rated": return "rating";
     case "rating": return "rating";
+    case "rated": return "rating";
+    case "cancelled": return "cancelled";
     default: return "searching";
   }
 }
@@ -260,32 +266,85 @@ function RidePage() {
   const fare = vehicle.price + (useSmartRoute ? 0 : 8);
   const smartSavings = 12;
 
-  // Poll for ride updates since we're using external API
+  // Real-time ride updates via Socket.IO
   useEffect(() => {
-    if (!ride) return;
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        const updatedRide = await rideApi.get(ride.id);
-        setRide(updatedRide);
-        setStep(stepFromStatus(updatedRide.status as RideStatus));
-        
-        // In a real app, we'd also get captain location from a separate endpoint or ride object
-        if (updatedRide.captainLocation) {
-           setCaptainPos(updatedRide.captainLocation);
-        }
-      } catch (e) {
-        console.error("Polling error", e);
-      }
-    }, 5000);
+    if (!ride?.id) return;
 
-    return () => clearInterval(pollInterval);
+    const token = storage.getAccessToken();
+    const socket = io("https://api.rideher.in", {
+      auth: { token: `Bearer ${token}` },
+      transports: ["websocket", "polling"],
+      withCredentials: true
+    });
+
+    socket.on("connect", () => {
+      console.log("Socket connected, joining ride:", ride.id);
+      socket.emit("join-ride", ride.id);
+    });
+
+    const handleUpdate = (updatedRide: any) => {
+      console.log("Ride update received:", updatedRide);
+      // Map backend snake_case to frontend expected fields if necessary, 
+      // but assuming the backend provides the correct structure or we adapt
+      const mappedRide = {
+        ...updatedRide,
+        pickup_lat: updatedRide.pickup_latitude ?? updatedRide.pickup_lat,
+        pickup_lng: updatedRide.pickup_longitude ?? updatedRide.pickup_lng,
+        drop_lat: updatedRide.drop_latitude ?? updatedRide.drop_lat,
+        drop_lng: updatedRide.drop_longitude ?? updatedRide.drop_lng,
+      };
+      setRide(mappedRide);
+      setStep(stepFromStatus(mappedRide.status as RideStatus));
+      
+      const cLat = mappedRide.captain_lat ?? mappedRide.captain_latitude;
+      const cLng = mappedRide.captain_lng ?? mappedRide.captain_longitude;
+      if (cLat && cLng) {
+        setCaptainPos({ lat: cLat, lng: cLng });
+      }
+    };
+
+    socket.on("ride.created", handleUpdate);
+    socket.on("ride.assigned", handleUpdate);
+    socket.on("ride.accepted", handleUpdate);
+    socket.on("ride.rejected", (data: any) => {
+      console.log("Ride rejected by captain:", data);
+      // Backend will find another captain, we just stay in searching step
+      // The ride object might be updated with new status if all captains reject
+      if (data.status) {
+        setStep(stepFromStatus(data.status as RideStatus));
+      }
+    });
+    socket.on("ride.arriving", handleUpdate);
+    socket.on("ride.arrived", handleUpdate);
+    socket.on("ride.started", handleUpdate);
+    socket.on("ride.completed", handleUpdate);
+    socket.on("ride.cancelled", (data: any) => {
+      handleUpdate(data);
+      alert("Ride was cancelled.");
+    });
+
+    // Also listen for captain location updates
+    socket.on("captain.location", (loc: any) => {
+      const lat = loc.lat ?? loc.latitude;
+      const lng = loc.lng ?? loc.longitude;
+      if (lat && lng) {
+        setCaptainPos({ lat, lng });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [ride?.id]);
 
   // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
   useEffect(() => {
     if (!ride || !captainPos) return;
-    if (ride.status !== "accepted" && ride.status !== "arriving") return;
+    if (ride.status !== "accepted" && ride.status !== "arriving") {
+      setApproachPolyline("");
+      approachFetchedRef.current = null;
+      return;
+    }
     if (approachFetchedRef.current === ride.id) return;
     approachFetchedRef.current = ride.id;
     (async () => {
@@ -355,15 +414,15 @@ function RidePage() {
     try {
       const data = await rideApi.create({
         pickup_label: pickup.label,
-        pickup_lat: pickup.lat,
-        pickup_lng: pickup.lng,
+        pickup_latitude: pickup.lat,
+        pickup_longitude: pickup.lng,
         drop_label: dest.addr,
-        drop_lat: dest.lat,
-        drop_lng: dest.lng,
-        vehicle_type: selected,
+        drop_latitude: dest.lat,
+        drop_longitude: dest.lng,
+        vehicle_type: selected.toUpperCase(),
         fare_inr: fare,
         use_smart_route: useSmartRoute,
-        payment_method: payment,
+        payment_method: payment.toUpperCase(),
       });
       setRide(data as Ride);
       setStep("searching");
@@ -388,14 +447,6 @@ function RidePage() {
     setStep("confirm");
   }
 
-  async function simulateArrivalAtPickup() {
-    if (!ride) return;
-    await rideApi.updateStatus(ride.id, "in_progress");
-  }
-  async function simulateCompleted() {
-    if (!ride) return;
-    await rideApi.updateStatus(ride.id, "completed");
-  }
   async function submitRating() {
     if (!ride) return;
     await rideApi.rate(ride.id, { rating, tip_inr: tip });
@@ -481,7 +532,55 @@ function RidePage() {
           <div className="hidden">'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
                                             
-                                            in the previous version the login was working but currently is not working its giving error</div>
+                                            IMPORTANT: CODE IMPLEMENTATION TASK — DO NOT ADD THIS AS UI TEXT.
+
+Update the Customer/Rider app to use the real location-based booking flow.
+
+Implement:
+
+- Detect customer pickup location using GPS.
+
+- Allow customer to search/select pickup and drop locations.
+
+- Send accurate latitude/longitude to the backend when booking.
+
+- Create the ride using the real booking API.
+
+- Show "Finding nearest captain" while dispatch is running.
+
+- Show captain details only after a captain accepts.
+
+- Receive real-time Socket.IO updates for:
+
+  ride.created
+
+  ride.assigned
+
+  ride.accepted
+
+  ride.rejected
+
+  ride.arriving
+
+  ride.arrived
+
+  ride.started
+
+  ride.completed
+
+  ride.cancelled
+
+- If a captain rejects/expires, continue showing the customer that another nearby captain is being searched.
+
+- Once a captain accepts, stop searching and display the assigned captain.
+
+- Show accurate pickup/drop, fare, ETA and ride status from the backend.
+
+Remove mock captain matching and fake ride progression.
+
+The backend must remain the authority for captain selection and assignment.
+
+Actually modify the existing code and test the complete booking flow.</div>
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
@@ -717,8 +816,8 @@ function RidePage() {
                 distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
               } to pickup${ride.captain_name ? ` · ${ride.captain_name}` : ""}`}
               ride={ride}
-              onNext={simulateArrivalAtPickup}
-              ctaLabel="Simulate pickup"
+              onNext={() => {}}
+              ctaLabel="Live tracking"
             />
           )}
 
@@ -731,13 +830,26 @@ function RidePage() {
                 useSmartRoute ? " · saving 12 min" : ""
               }`}
               ride={ride}
-              onNext={simulateCompleted}
-              ctaLabel="Simulate arrival"
+              onNext={() => {}}
+              ctaLabel="Live tracking"
             />
           )}
 
           {step === "completed" && ride && (
-            <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} />
+            <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} ride={ride} />
+          )}
+
+          {step === "cancelled" && (
+            <div className="px-6 pb-12 pt-6 text-center">
+              <h2 className="text-2xl font-extrabold tracking-tight">Ride Cancelled</h2>
+              <p className="mt-2 text-sm text-muted-foreground">The ride has been cancelled.</p>
+              <button
+                onClick={() => { setRide(null); setStep("destination"); }}
+                className="mt-6 h-14 w-full rounded-full bg-primary text-sm font-bold text-secondary shadow-xl transition-transform active:scale-95"
+              >
+                Back to booking
+              </button>
+            </div>
           )}
 
           {step === "rating" && ride && (
@@ -767,6 +879,7 @@ function StepIndicator({ step }: { step: UiStep }) {
     arriving: "06 · Pickup",
     inprogress: "07 · En route",
     completed: "08 · Arrived",
+    cancelled: "08 · Cancelled",
     rating: "09 · Rate",
   };
   return (
@@ -1193,30 +1306,10 @@ function MatchedStep({ ride }: { ride: Ride }) {
   );
 }
 
-// Simulate the captain closing distance to pickup: emit location pings, then flip status to "arriving".
+// Mock simulation removed as backend is now the authority.
 function useCaptainToPickup(ride: Ride) {
-  useEffect(() => {
-    if (ride.status !== "accepted") return;
-    // Start ~1km away and interpolate toward pickup over ~10 seconds
-    const start = {
-      lat: ride.pickup_lat + 0.008,
-      lng: ride.pickup_lng + 0.010,
-    };
-    const end = { lat: ride.pickup_lat, lng: ride.pickup_lng };
-    const path = [start, end];
-    let i = 0;
-    const steps = 8;
-    const t = setInterval(async () => {
-      i++;
-      const pos = pointAt(path, Math.min(i / steps, 1));
-      await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
-      if (i >= steps) {
-        clearInterval(t);
-        await rideApi.updateStatus(ride.id, "arriving");
-      }
-    }, 1200);
-    return () => clearInterval(t);
-  }, [ride.id, ride.status]);
+  // Logic replaced by Socket.IO updates
+  useEffect(() => {}, [ride.id]);
 }
 
 /* ---------- Generic in-ride status ---------- */
@@ -1229,7 +1322,7 @@ function RideStatusStep({
   onNext: () => void;
   ctaLabel: string;
 }) {
-  // During in_progress: animate captain along route from pickup to drop
+  // Mock simulation removed as backend is now the authority.
   useCaptainDriving(ride);
 
   return (
@@ -1271,51 +1364,13 @@ function RideStatusStep({
   );
 }
 
+// Mock simulation removed as backend is now the authority.
 function useCaptainDriving(ride: Ride) {
-  useEffect(() => {
-    if (ride.status !== "in_progress") return;
-    // Fetch route polyline for animation
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    (async () => {
-      try {
-        const res = await computeRoute({
-          data: {
-            origin: { lat: ride.pickup_lat, lng: ride.pickup_lng },
-            destination: { lat: ride.drop_lat, lng: ride.drop_lng },
-            travelMode: ride.vehicle_type === "auto" ? "DRIVE" : "TWO_WHEELER",
-          },
-        });
-        if (cancelled) return;
-        const path = res.encodedPolyline ? decodePolyline(res.encodedPolyline) : [
-          { lat: ride.pickup_lat, lng: ride.pickup_lng },
-          { lat: ride.drop_lat, lng: ride.drop_lng },
-        ];
-        let i = 0;
-        const steps = 14;
-        interval = setInterval(async () => {
-          i++;
-          const pos = pointAt(path, Math.min(i / steps, 1));
-          await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
-          if (i >= steps && interval) {
-            clearInterval(interval);
-          }
-        }, 1500);
-      } catch (e) {
-        console.warn(e);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (interval) clearInterval(interval);
-    };
-  }, [ride.id, ride.status]);
+  useEffect(() => {}, [ride.id]);
 }
 
 /* ---------- Completed ---------- */
-function CompletedStep({ fare, onNext }: { fare: number; onNext: () => void }) {
+function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => void; ride: Ride }) {
   return (
     <>
       <div className="mb-4 px-6">
@@ -1331,9 +1386,9 @@ function CompletedStep({ fare, onNext }: { fare: number; onNext: () => void }) {
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="Distance" value="8.4 km" />
-            <Stat label="Duration" value="22 min" />
-            <Stat label="Saved" value="12 min" accent />
+            <Stat label="Distance" value={ride ? `${(haversineKm({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng})).toFixed(1)} km` : "—"} />
+            <Stat label="Duration" value={ride ? `${computeEtaMinutes({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng}, ride.vehicle_type)} min` : "—"} />
+            <Stat label="Saved" value={ride?.use_smart_route ? "12 min" : "—"} accent />
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ export type RideStatus =
   | "arriving"
   | "in_progress"
   | "completed"
+  | "cancelled"
   | "rating"
   | "rated";
 
