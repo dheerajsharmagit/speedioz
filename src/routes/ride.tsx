@@ -1322,47 +1322,9 @@ function RideStatusStep({
   );
 }
 
+// Mock simulation removed as backend is now the authority.
 function useCaptainDriving(ride: Ride) {
-  useEffect(() => {
-    if (ride.status !== "in_progress") return;
-    // Fetch route polyline for animation
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    (async () => {
-      try {
-        const res = await computeRoute({
-          data: {
-            origin: { lat: ride.pickup_lat, lng: ride.pickup_lng },
-            destination: { lat: ride.drop_lat, lng: ride.drop_lng },
-            travelMode: ride.vehicle_type === "auto" ? "DRIVE" : "TWO_WHEELER",
-          },
-        });
-        if (cancelled) return;
-        const path = res.encodedPolyline ? decodePolyline(res.encodedPolyline) : [
-          { lat: ride.pickup_lat, lng: ride.pickup_lng },
-          { lat: ride.drop_lat, lng: ride.drop_lng },
-        ];
-        let i = 0;
-        const steps = 14;
-        interval = setInterval(async () => {
-          i++;
-          const pos = pointAt(path, Math.min(i / steps, 1));
-          await rideApi.updateLocation(ride.id, pos.lat, pos.lng);
-          if (i >= steps && interval) {
-            clearInterval(interval);
-          }
-        }, 1500);
-      } catch (e) {
-        console.warn(e);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (interval) clearInterval(interval);
-    };
-  }, [ride.id, ride.status]);
+  useEffect(() => {}, [ride.id]);
 }
 
 /* ---------- Completed ---------- */
