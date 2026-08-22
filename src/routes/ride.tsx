@@ -218,7 +218,7 @@ function RidePage() {
     deviceIdRef.current = getDeviceId();
     const user = storage.getUser();
     if (!user) {
-      navigate({ to: "/auth" });
+      navigate({ to: "/auth", search: { mode: "signin" } });
       return;
     }
     userIdRef.current = user.id;
