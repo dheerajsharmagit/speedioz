@@ -8,6 +8,7 @@ import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
+import { io, Socket } from "socket.io-client";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
