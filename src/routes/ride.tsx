@@ -1280,7 +1280,7 @@ function RideStatusStep({
   onNext: () => void;
   ctaLabel: string;
 }) {
-  // During in_progress: animate captain along route from pickup to drop
+  // Mock simulation removed as backend is now the authority.
   useCaptainDriving(ride);
 
   return (
