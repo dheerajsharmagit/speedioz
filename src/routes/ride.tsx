@@ -397,15 +397,15 @@ function RidePage() {
     try {
       const data = await rideApi.create({
         pickup_label: pickup.label,
-        pickup_lat: pickup.lat,
-        pickup_lng: pickup.lng,
+        pickup_latitude: pickup.lat,
+        pickup_longitude: pickup.lng,
         drop_label: dest.addr,
-        drop_lat: dest.lat,
-        drop_lng: dest.lng,
-        vehicle_type: selected,
+        drop_latitude: dest.lat,
+        drop_longitude: dest.lng,
+        vehicle_type: selected.toUpperCase(),
         fare_inr: fare,
         use_smart_route: useSmartRoute,
-        payment_method: payment,
+        payment_method: payment.toUpperCase(),
       });
       setRide(data as Ride);
       setStep("searching");
