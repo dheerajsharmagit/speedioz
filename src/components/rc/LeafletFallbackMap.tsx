@@ -131,9 +131,14 @@ export function LeafletFallbackMap({
     }
     (map as any)._ridePolylines = [];
 
+    let path: LatLng[] = [];
     if (polyline) {
-      const path = decodePolyline(polyline);
-      if (path.length > 1) {
+      path = decodePolyline(polyline);
+    } else if (pickup.lat !== drop.lat || pickup.lng !== drop.lng) {
+      path = [pickup, drop];
+    }
+
+    if (path.length > 1) {
         // Find split point for traveled vs remaining
         const splitIdx = captain ? nearestIndex(path, captain) : 0;
         const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
