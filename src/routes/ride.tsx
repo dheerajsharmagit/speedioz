@@ -795,8 +795,8 @@ Actually modify the existing code and test the complete booking flow.</div>
                 useSmartRoute ? " · saving 12 min" : ""
               }`}
               ride={ride}
-              onNext={simulateCompleted}
-              ctaLabel="Simulate arrival"
+              onNext={() => {}}
+              ctaLabel="Live tracking"
             />
           )}
 
