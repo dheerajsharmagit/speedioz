@@ -781,8 +781,8 @@ Actually modify the existing code and test the complete booking flow.</div>
                 distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
               } to pickup${ride.captain_name ? ` · ${ride.captain_name}` : ""}`}
               ride={ride}
-              onNext={simulateArrivalAtPickup}
-              ctaLabel="Simulate pickup"
+              onNext={() => {}}
+              ctaLabel="Live tracking"
             />
           )}
 
