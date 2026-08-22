@@ -1,14 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
 
-type Role = "CUSTOMER";
-
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): { mode?: "signin" | "signup" } => {
+  validateSearch: (search: Record<string, any>): { mode: "signin" | "signup" } => {
     return {
-      mode: (search.mode === "signin" || search.mode === "signup" ? search.mode : undefined) as "signin" | "signup" | undefined,
+      mode: (search.mode === "signup" ? "signup" : "signin"),
     };
   },
   head: () => ({
@@ -22,8 +20,9 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const { mode: initialMode } = Route.useSearch();
-  const [mode, setMode] = useState<"signin" | "signup">(initialMode === "signin" ? "signin" : "signup");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
@@ -40,7 +39,7 @@ function AuthPage() {
     }
   }, [navigate]);
 
-  async function handleGoogle() {
+  const handleGoogle = async () => {
     setError(null);
     setLoading(true);
     try {
@@ -48,35 +47,29 @@ function AuthPage() {
         redirect_uri: window.location.origin + "/auth",
       });
       
-      // Lovable auth will redirect. After redirect back to /auth, 
-      // we need to handle the credential if it's in the URL or session.
-      // However, the standard flow in the provided docs is to send the Google ID token.
-      // For web, if we use Supabase OAuth, the user is already signed into Supabase.
-      // We might need to get the session and then call our backend.
-      
       if (result.error) throw result.error;
       
-      // If we are already signed in to Supabase, we get the token and sign up to our backend
-      const { data: { session } } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
+      const supabaseClient = await import("@/integrations/supabase/client");
+      const { data: { session } } = await supabaseClient.supabase.auth.getSession();
       if (session?.access_token) {
         const authRes = await authApi.signupGoogle(session.access_token);
         storage.saveAuth(authRes);
+        await router.invalidate();
         navigate({ to: "/ride" });
       }
     } catch (e: any) {
       setError(e.message || "Google sign-in failed");
       setLoading(false);
     }
-  }
+  };
 
-  async function handleEmail(e: React.FormEvent) {
+  const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     setError(null);
     setLoading(true);
+    
     try {
       if (mode === "signup" && !showOtp) {
-        // Mock OTP send
         setShowOtp(true);
         setLoading(false);
         return;
@@ -97,16 +90,20 @@ function AuthPage() {
           role: "CUSTOMER"
         });
       } else {
-        authRes = await authApi.login({ email, password });
+        authRes = await authApi.login({ email: email.trim(), password });
+        console.log("Login successful:", authRes);
       }
+      
       storage.saveAuth(authRes);
+      await router.invalidate();
       navigate({ to: "/ride" });
     } catch (e: any) {
+      console.error("Auth error:", e);
       setError(e.error?.message || e.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -127,8 +124,8 @@ function AuthPage() {
           </p>
         </div>
 
-
         <button
+          type="button"
           onClick={handleGoogle}
           disabled={loading}
           className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
@@ -232,6 +229,7 @@ function AuthPage() {
         </form>
 
         <button
+          type="button"
           onClick={() => { setError(null); setMode(mode === "signup" ? "signin" : "signup"); setShowOtp(false); }}
           className="mt-6 text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
         >
