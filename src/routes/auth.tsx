@@ -4,9 +4,9 @@ import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): { mode: "signin" | "signup" } => {
+  validateSearch: (search: Record<string, any>): { mode: "signin" | "signup" } => {
     return {
-      mode: (search.mode === "signup" ? "signup" : "signin") as "signin" | "signup",
+      mode: (search.mode === "signup" ? "signup" : "signin"),
     };
   },
   head: () => ({
