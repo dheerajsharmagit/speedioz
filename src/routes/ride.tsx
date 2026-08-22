@@ -284,11 +284,22 @@ function RidePage() {
 
     const handleUpdate = (updatedRide: any) => {
       console.log("Ride update received:", updatedRide);
-      setRide(updatedRide);
-      setStep(stepFromStatus(updatedRide.status as RideStatus));
+      // Map backend snake_case to frontend expected fields if necessary, 
+      // but assuming the backend provides the correct structure or we adapt
+      const mappedRide = {
+        ...updatedRide,
+        pickup_lat: updatedRide.pickup_latitude ?? updatedRide.pickup_lat,
+        pickup_lng: updatedRide.pickup_longitude ?? updatedRide.pickup_lng,
+        drop_lat: updatedRide.drop_latitude ?? updatedRide.drop_lat,
+        drop_lng: updatedRide.drop_longitude ?? updatedRide.drop_lng,
+      };
+      setRide(mappedRide);
+      setStep(stepFromStatus(mappedRide.status as RideStatus));
       
-      if (updatedRide.captain_lat && updatedRide.captain_lng) {
-        setCaptainPos({ lat: updatedRide.captain_lat, lng: updatedRide.captain_lng });
+      const cLat = mappedRide.captain_lat ?? mappedRide.captain_latitude;
+      const cLng = mappedRide.captain_lng ?? mappedRide.captain_longitude;
+      if (cLat && cLng) {
+        setCaptainPos({ lat: cLat, lng: cLng });
       }
     };
 
