@@ -714,7 +714,9 @@ Handle loading, errors, authentication and booking status changes. Use the exist
         {/* '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
                                             
-                                            use this as google maps api key @secret:GOOGLE_API_KEY */}
+                                            use this as google maps api key @secret:GOOGLE_API_KEY
+                                            
+                                            use the google maps with the api key for maps and routes price calculation and booking */}
 
         {/* Bottom sheet */}
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
