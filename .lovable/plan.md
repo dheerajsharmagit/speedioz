@@ -1,40 +1,28 @@
-# User Profile Integration Plan
+# Fix: Google Maps not visible on the ride page
 
-Add a comprehensive user profile system to RIDEHER, allowing users to manage their personal information, ride history, and saved locations, while strictly following the "no visual modifications" directive for the requested text replacement.
+## What I verified first
 
-## User Review Required
-> [!IMPORTANT]
-> The requested text replacement includes a meta-instruction ("Do not make any visual modifications...") which will be applied literally to the element as requested.
+- The reported `src/lib/utils.ts(8,7)` TypeScript error is stale: that file is 6 lines long and has no typed assignment. The latest build log shows no errors. Nothing to fix there.
+- The Google Maps script itself loads fine in this environment: on `/ride`, `window.google.maps` is present, `gm_authFailure` never fires, and there are no console errors.
+- I could not reproduce the blank map end to end because `/ride` redirects to `/auth` without a signed-in session, and no preview session is available to the test browser right now. So the exact cause is unconfirmed — the plan starts by confirming it.
 
-- Should any profile fields (like gender) be mandatory given the women-only focus of the platform?
-- Would you like to include an emergency contact feature in the profile?
+## Likely cause (unconfirmed)
 
-## Proposed Changes
+The map is created once, immediately after the Google script resolves. If the map container has zero or near-zero size at that instant (bottom sheet still laying out, tab/step transition, mobile viewport), Google Maps initialises into a collapsed box and then never redraws, which shows as a blank grey panel even though the API loaded successfully. There is currently no container-size observation, no re-init when the container becomes non-zero, and no visible reason shown to the user when the map stays empty.
 
-### 1. Data Layer & API
-- Update `AuthUser` in `src/lib/api.ts` to include common profile fields: `avatarUrl`, `memberSince`, `totalRides`, `totalRating`, `emergencyContact`.
-- Add `userApi.getProfile` and `userApi.updateProfile` methods to `src/lib/api.ts`.
-- Add `userApi.getRideHistory` to fetch past trips.
+A second possibility, which the same work covers: the map initialises before the pickup coordinates resolve, centering on a default point with nothing recognisable in view.
 
-### 2. Components
-- **`ProfileHeader.tsx`**: A visual summary of the user (avatar, name, rating, membership status).
-- **`ProfileForm.tsx`**: Form to edit personal details (name, email, phone, gender).
-- **`RideHistoryList.tsx`**: A list of recent rides with basic details (date, route, cost).
-- **`SavedPlacesManager.tsx`**: UI to add/remove Home/Work/Favorite locations.
+## Plan
 
-### 3. Routing & Pages
-- **`/profile` route**: Create `src/routes/profile.tsx` as the main hub.
-- **`/profile/edit` route**: Create `src/routes/profile.edit.tsx` for updating information.
-- **`/profile/history` route**: Create `src/routes/profile.history.tsx` for trip logs.
+1. **Confirm the cause.** Sign in to the preview so `/ride` is reachable, then check, in the live page, whether the map container reports a non-zero width/height at init and whether Google's own tile markup (`.gm-style`) exists inside it. This decides between "collapsed container" and "map never constructed".
+2. **Make the map resilient to container size.** Observe the map container with a `ResizeObserver`; when it changes from zero to a real size, trigger a Google Maps resize and re-fit the current bounds. Retry construction if the container was zero-sized when the script resolved.
+3. **Defer/refresh the initial center.** Ensure the map recenters and refits once real pickup coordinates arrive, so it never sits on a placeholder location.
+4. **Never show a silent blank panel.** If the map has loaded but produced no tiles within a short window, fall back to the existing Leaflet backup map (already implemented) and show the existing "Using backup map / Retry" pill, so the page always shows something usable.
+5. **Verify.** Re-test `/ride` signed in at mobile and desktop widths: map visible on first paint, visible after switching booking steps, pickup/drop markers and route line drawn, and no new console errors. Also confirm the build passes.
 
-### 4. Navigation
-- Add "Profile" to the `RoleNav` component.
+## Technical notes
 
-### 5. Requested Text Edit
-- Replace the text in `src/routes/ride.tsx` (the " " at the top of the booking flow/hero) with the exact literal string provided by the user, including the meta-instructions.
-
-## Technical Details
-- **Role Isolation**: Maintain the "Customer only" restriction for the profile views.
-- **State Management**: Use TanStack Query (if applicable) or `useEffect` polling/caching to keep profile data fresh.
-- **Brand Consistency**: Use the established rose/blush palette and "RideHer" aesthetic.
-- **Error Handling**: Implement validation for phone numbers and email formats in the profile form.
+- Changes are limited to `src/components/rc/RideMap.tsx` and, if the container CSS is implicated, the map wrapper in `src/routes/ride.tsx` (currently `relative min-h-[360px] flex-1` with the map as `absolute inset-0`).
+- No changes to booking logic, the `api.rideher.in` integration, socket events, the Places search fix, the API key, or the UI design.
+- The Leaflet fallback, the retry/backoff loader, and the `gm_authFailure` hook stay as they are; this only adds the missing "loaded but not painted" path.
+- If step 1 instead shows an authentication/referrer failure on your published or custom domain, I will report that separately, since a Lovable-managed Maps key only works on `*.lovable.app` domains and needs your own key for a custom domain.
