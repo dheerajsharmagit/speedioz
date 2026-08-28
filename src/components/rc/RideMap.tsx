@@ -82,6 +82,7 @@ export function RideMap({
   // Init map once
   useEffect(() => {
     let cancelled = false;
+    let tileCheck: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       const g = await loadGoogleMaps().catch((e: unknown) => {
         console.error("Google Maps failed to load", e);
@@ -90,6 +91,15 @@ export function RideMap({
       });
       if (cancelled || !g || !containerRef.current) return;
 
+      // Google Maps renders into a collapsed box (blank grey) if the container
+      // has no size at construction time. Wait for a real size first.
+      const el = containerRef.current;
+      for (let i = 0; i < 40; i++) {
+        if (cancelled) return;
+        if (el.clientWidth > 0 && el.clientHeight > 0) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (cancelled || !containerRef.current) return;
 
       mapRef.current = new g.maps.Map(containerRef.current, {
         center: pickup,
@@ -103,6 +113,15 @@ export function RideMap({
           { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
         ],
       });
+
+      // If Google loaded but never painted tiles, switch to the backup map
+      // instead of leaving a silent blank panel.
+      tileCheck = setTimeout(() => {
+        if (cancelled) return;
+        const painted = containerRef.current?.querySelector(".gm-style");
+        if (!painted) setLoadError("Google Maps did not render on this device");
+      }, 4000);
+
 
       pickupMarkerRef.current = new g.maps.Marker({
         position: pickup,
