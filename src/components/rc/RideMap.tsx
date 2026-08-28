@@ -165,6 +165,7 @@ export function RideMap({
 
     return () => {
       cancelled = true;
+      if (tileCheck) clearTimeout(tileCheck);
       offAuth();
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
@@ -178,6 +179,36 @@ export function RideMap({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryTick]);
+
+  // Keep the map painted when its container changes size (bottom-sheet layout,
+  // step transitions, orientation changes). Without this, a map constructed in
+  // a small/collapsed box stays visually blank.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let last = { w: el.clientWidth, h: el.clientHeight };
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w === last.w && h === last.h) return;
+      last = { w, h };
+      if (!mapRef.current || w === 0 || h === 0) return;
+      const g = window.google;
+      if (!g) return;
+      // Nudge Google Maps to re-measure, then restore framing.
+      window.dispatchEvent(new Event("resize"));
+      const bounds = new g.maps.LatLngBounds();
+      bounds.extend(pickup);
+      bounds.extend(drop);
+      if (captain) bounds.extend(captain);
+      for (const pt of pathRef.current) bounds.extend(pt);
+      mapRef.current.fitBounds(bounds, 60);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
+
 
 
   // Decode polyline once per change and keep it for both drawing and bounds fitting.
