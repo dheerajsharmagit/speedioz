@@ -82,6 +82,7 @@ export function RideMap({
   // Init map once
   useEffect(() => {
     let cancelled = false;
+    let tileCheck: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       const g = await loadGoogleMaps().catch((e: unknown) => {
         console.error("Google Maps failed to load", e);
@@ -90,6 +91,15 @@ export function RideMap({
       });
       if (cancelled || !g || !containerRef.current) return;
 
+      // Google Maps renders into a collapsed box (blank grey) if the container
+      // has no size at construction time. Wait for a real size first.
+      const el = containerRef.current;
+      for (let i = 0; i < 40; i++) {
+        if (cancelled) return;
+        if (el.clientWidth > 0 && el.clientHeight > 0) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (cancelled || !containerRef.current) return;
 
       mapRef.current = new g.maps.Map(containerRef.current, {
         center: pickup,
@@ -103,6 +113,15 @@ export function RideMap({
           { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
         ],
       });
+
+      // If Google loaded but never painted tiles, switch to the backup map
+      // instead of leaving a silent blank panel.
+      tileCheck = setTimeout(() => {
+        if (cancelled) return;
+        const painted = containerRef.current?.querySelector(".gm-style");
+        if (!painted) setLoadError("Google Maps did not render on this device");
+      }, 4000);
+
 
       pickupMarkerRef.current = new g.maps.Marker({
         position: pickup,
@@ -146,6 +165,7 @@ export function RideMap({
 
     return () => {
       cancelled = true;
+      if (tileCheck) clearTimeout(tileCheck);
       offAuth();
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
@@ -159,6 +179,36 @@ export function RideMap({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryTick]);
+
+  // Keep the map painted when its container changes size (bottom-sheet layout,
+  // step transitions, orientation changes). Without this, a map constructed in
+  // a small/collapsed box stays visually blank.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let last = { w: el.clientWidth, h: el.clientHeight };
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w === last.w && h === last.h) return;
+      last = { w, h };
+      if (!mapRef.current || w === 0 || h === 0) return;
+      const g = window.google;
+      if (!g) return;
+      // Nudge Google Maps to re-measure, then restore framing.
+      window.dispatchEvent(new Event("resize"));
+      const bounds = new g.maps.LatLngBounds();
+      bounds.extend(pickup);
+      bounds.extend(drop);
+      if (captain) bounds.extend(captain);
+      for (const pt of pathRef.current) bounds.extend(pt);
+      mapRef.current.fitBounds(bounds, 60);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
+
 
 
   // Decode polyline once per change and keep it for both drawing and bounds fitting.
