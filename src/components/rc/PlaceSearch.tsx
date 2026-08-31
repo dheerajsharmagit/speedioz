@@ -105,10 +105,12 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
             sessionToken: sessionTokenRef.current,
           };
           if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
-            request.locationBias = {
-              center: { lat: bias.lat, lng: bias.lng },
-              radius: 30000,
-            };
+            // The Places JS SDK expects a Circle instance / CircleLiteral with a
+            // LatLng center — the REST `latitude/longitude` shape is rejected.
+            const Circle = (g.maps as any).Circle;
+            request.locationBias = Circle
+              ? new Circle({ center: { lat: bias.lat, lng: bias.lng }, radius: 30000 })
+              : { lat: bias.lat, lng: bias.lng };
           }
           const { suggestions: rawSuggestions } =
             await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
