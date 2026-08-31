@@ -195,3 +195,47 @@ export const userApi = {
   getProfile: () => api<{ user: AuthUser }>('/users/me/profile'),
   updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me/profile', { method: 'PATCH', body: JSON.stringify(data) }),
 };
+
+// Captain methods.
+// The RIDEHER backend exposes captain queues under a few different paths
+// depending on deployment, so each read tries the known candidates in order and
+// keeps the first one that answers.
+function unwrapList(res: any): any[] {
+  if (Array.isArray(res)) return res;
+  return res?.data ?? res?.rides ?? res?.items ?? [];
+}
+
+async function firstOk<T>(paths: string[], init?: RequestInit): Promise<T> {
+  let lastError: unknown;
+  for (const p of paths) {
+    try {
+      return await api<T>(p, init);
+    } catch (e) {
+      lastError = e;
+      if (e instanceof RequestError && (e.status === 404 || e.status === 405)) continue;
+      throw e;
+    }
+  }
+  throw lastError;
+}
+
+export const captainApi = {
+  pending: async () => unwrapList(await firstOk<any>(['/rides/available', '/rides/pending', '/rides/queue'])),
+  active: async () => unwrapList(await firstOk<any>(['/rides?role=captain&status=active', '/captains/me/active-rides', '/rides/active'])),
+  completed: async () =>
+    unwrapList(await firstOk<any>(['/rides?role=captain&status=COMPLETED', '/captains/me/ride-history', '/users/me/rides'])),
+  accept: (id: string) =>
+    firstOk<any>([`/rides/${id}/accept`, `/rides/${id}`], {
+      method: 'POST',
+      body: JSON.stringify({ status: 'ACCEPTED' }),
+    }),
+  decline: (id: string) =>
+    firstOk<any>([`/rides/${id}/reject`, `/rides/${id}/decline`], { method: 'POST', body: JSON.stringify({}) }),
+  setStatus: (id: string, status: string) =>
+    firstOk<any>([`/rides/${id}/status`, `/rides/${id}`], { method: 'PATCH', body: JSON.stringify({ status }) }),
+  setAvailability: (isAvailable: boolean) =>
+    firstOk<any>(['/captains/me/availability', '/captains/me'], {
+      method: 'PATCH',
+      body: JSON.stringify({ isAvailable, status: isAvailable ? 'AVAILABLE' : 'OFFLINE' }),
+    }),
+};
