@@ -428,7 +428,12 @@ function RidePage() {
       setStep("searching");
     } catch (e: any) {
       console.error(e);
-      alert(e.error?.message || "Couldn't create ride. Try again.");
+      const code = e?.error?.code;
+      const msg =
+        code === "EXTERNAL_API_ERROR"
+          ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
+          : e?.error?.message || "Couldn't create ride. Try again.";
+      alert(msg);
     } finally {
       setCreating(false);
     }
