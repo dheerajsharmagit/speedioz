@@ -96,7 +96,9 @@ async function refreshToken(): Promise<string> {
 
   const data: AuthResponse = await res.json();
   storage.saveAuth(data);
-  return data.tokens.accessToken;
+  const token = storage.getAccessToken();
+  if (!token) throw new Error('Refresh failed');
+  return token;
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
