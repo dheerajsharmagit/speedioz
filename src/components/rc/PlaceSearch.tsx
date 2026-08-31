@@ -106,13 +106,8 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
           };
           if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
             request.locationBias = {
-              circle: {
-                center: {
-                  latitude: bias.lat,
-                  longitude: bias.lng,
-                },
-                radius: 30000,
-              },
+              center: { lat: bias.lat, lng: bias.lng },
+              radius: 30000,
             };
           }
           const { suggestions: rawSuggestions } =
