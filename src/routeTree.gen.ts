@@ -19,6 +19,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiDocsRouteImport } from './routes/api-docs'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicRhSplatRouteImport } from './routes/api/public/rh/$'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -70,6 +71,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicRhSplatRoute = ApiPublicRhSplatRouteImport.update({
+  id: '/api/public/rh/$',
+  path: '/api/public/rh/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rh/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rh/$'
   id:
     | '__root__'
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rh/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   RideRoute: typeof RideRoute
   RoutesRoute: typeof RoutesRoute
   SettingsRoute: typeof SettingsRoute
+  ApiPublicRhSplatRoute: typeof ApiPublicRhSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/rh/$': {
+      id: '/api/public/rh/$'
+      path: '/api/public/rh/$'
+      fullPath: '/api/public/rh/$'
+      preLoaderRoute: typeof ApiPublicRhSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   RideRoute: RideRoute,
   RoutesRoute: RoutesRoute,
   SettingsRoute: SettingsRoute,
+  ApiPublicRhSplatRoute: ApiPublicRhSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,5 +1,7 @@
 
-const API_URL = 'https://api.rideher.in/api/v1';
+// The RIDEHER backend sends no CORS headers, so browser calls go through our own
+// same-origin proxy route (which forwards the caller's bearer token upstream).
+const API_URL = '/api/public/rh';
 const ACCESS_TOKEN_KEY = 'rh_access_token';
 const REFRESH_TOKEN_KEY = 'rh_refresh_token';
 const USER_KEY = 'rh_user';
