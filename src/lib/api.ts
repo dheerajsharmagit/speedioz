@@ -60,8 +60,16 @@ export const storage = {
     return u ? JSON.parse(u) : null;
   },
   saveAuth: (res: AuthResponse) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, res.tokens.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, res.tokens.refreshToken);
+    // The backend returns tokens either nested under `tokens` or flat on the root.
+    const raw = res as unknown as {
+      tokens?: { accessToken?: string; refreshToken?: string };
+      accessToken?: string;
+      refreshToken?: string;
+    };
+    const accessToken = raw.tokens?.accessToken ?? raw.accessToken;
+    const refreshToken = raw.tokens?.refreshToken ?? raw.refreshToken;
+    if (accessToken) localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
   },
   clearAuth: () => {
