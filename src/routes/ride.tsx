@@ -419,7 +419,8 @@ function RidePage() {
         dropAddress: dest.addr,
         dropLat: dest.lat,
         dropLng: dest.lng,
-        vehicleType: selected === "ev" ? "EV_BIKE" : selected.toUpperCase(),
+        // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
+        vehicleType: selected === "ev" ? "BIKE" : selected.toUpperCase(),
         fareInr: fare,
         useSmartRoute,
         paymentMethod: payment.toUpperCase(),
