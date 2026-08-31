@@ -1,5 +1,7 @@
 
-const API_URL = 'https://api.rideher.in/api/v1';
+// The RIDEHER backend sends no CORS headers, so browser calls go through our own
+// same-origin proxy route (which forwards the caller's bearer token upstream).
+const API_URL = '/api/public/rh';
 const ACCESS_TOKEN_KEY = 'rh_access_token';
 const REFRESH_TOKEN_KEY = 'rh_refresh_token';
 const USER_KEY = 'rh_user';
@@ -58,8 +60,16 @@ export const storage = {
     return u ? JSON.parse(u) : null;
   },
   saveAuth: (res: AuthResponse) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, res.tokens.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, res.tokens.refreshToken);
+    // The backend returns tokens either nested under `tokens` or flat on the root.
+    const raw = res as unknown as {
+      tokens?: { accessToken?: string; refreshToken?: string };
+      accessToken?: string;
+      refreshToken?: string;
+    };
+    const accessToken = raw.tokens?.accessToken ?? raw.accessToken;
+    const refreshToken = raw.tokens?.refreshToken ?? raw.refreshToken;
+    if (accessToken) localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
   },
   clearAuth: () => {
@@ -86,7 +96,9 @@ async function refreshToken(): Promise<string> {
 
   const data: AuthResponse = await res.json();
   storage.saveAuth(data);
-  return data.tokens.accessToken;
+  const token = storage.getAccessToken();
+  if (!token) throw new Error('Refresh failed');
+  return token;
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {

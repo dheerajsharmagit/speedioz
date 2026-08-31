@@ -105,15 +105,9 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
             sessionToken: sessionTokenRef.current,
           };
           if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
-            request.locationBias = {
-              circle: {
-                center: {
-                  latitude: bias.lat,
-                  longitude: bias.lng,
-                },
-                radius: 30000,
-              },
-            };
+            // The Places JS SDK wants a LatLng-shaped bias; the REST
+            // `circle.center.latitude/longitude` shape is rejected.
+            request.locationBias = { lat: bias.lat, lng: bias.lng };
           }
           const { suggestions: rawSuggestions } =
             await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);

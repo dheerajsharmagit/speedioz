@@ -413,22 +413,27 @@ function RidePage() {
     setCreating(true);
     try {
       const data = await rideApi.create({
-        pickup_label: pickup.label,
-        pickup_latitude: pickup.lat,
-        pickup_longitude: pickup.lng,
-        drop_label: dest.addr,
-        drop_latitude: dest.lat,
-        drop_longitude: dest.lng,
-        vehicle_type: selected.toUpperCase(),
-        fare_inr: fare,
-        use_smart_route: useSmartRoute,
-        payment_method: payment.toUpperCase(),
+        pickupAddress: pickup.label,
+        pickupLat: pickup.lat,
+        pickupLng: pickup.lng,
+        dropAddress: dest.addr,
+        dropLat: dest.lat,
+        dropLng: dest.lng,
+        vehicleType: selected === "ev" ? "EV_BIKE" : selected.toUpperCase(),
+        fareInr: fare,
+        useSmartRoute,
+        paymentMethod: payment.toUpperCase(),
       });
       setRide(data as Ride);
       setStep("searching");
     } catch (e: any) {
       console.error(e);
-      alert(e.error?.message || "Couldn't create ride. Try again.");
+      const code = e?.error?.code;
+      const msg =
+        code === "EXTERNAL_API_ERROR"
+          ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
+          : e?.error?.message || "Couldn't create ride. Try again.";
+      alert(msg);
     } finally {
       setCreating(false);
     }
