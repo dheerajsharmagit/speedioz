@@ -222,6 +222,11 @@ export const fareApi = {
     api<{ data: { min: number; max: number } }>("/fares/estimate", { method: "POST", body: JSON.stringify(data) }),
 };
 
+export const captainAvailabilityApi = {
+  get: (vehicleType?: "BIKE" | "AUTO" | "CAB") =>
+    api<{ data: { activeCaptains: number } }>(`/captains/availability${vehicleType ? `?vehicleType=${vehicleType}` : ""}`),
+};
+
 export type CanonicalRideStatus =
   | 'SEARCHING'
   | 'MATCHED'

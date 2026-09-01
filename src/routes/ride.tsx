@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
+import { API_BASE_URL, captainAvailabilityApi, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -231,6 +231,7 @@ function RidePage() {
 
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
   const [fareQuote, setFareQuote] = useState<number | null>(null);
+  const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
 
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -435,6 +436,16 @@ function RidePage() {
     return () => { cancelled = true; };
   }, [routeInfo?.distanceMeters, routeInfo?.durationSeconds, selected]);
 
+  useEffect(() => {
+    const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
+    const refreshAvailability = () => captainAvailabilityApi.get(vehicleType)
+      .then((response) => setActiveCaptains(response.data.activeCaptains))
+      .catch(() => setActiveCaptains(null));
+    refreshAvailability();
+    const interval = window.setInterval(refreshAvailability, 30000);
+    return () => window.clearInterval(interval);
+  }, [selected]);
+
   async function createRide() {
     if (!dest) return;
     setCreating(true);
@@ -622,6 +633,13 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             recenterTarget={userLocation ?? mapPickup}
             className="absolute inset-0"
           />
+
+          {activeCaptains !== null && (
+            <div className="absolute left-4 top-24 flex items-center gap-2 rounded-full bg-card/95 px-3 py-2 text-xs font-bold text-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+              <span aria-hidden="true" className="text-base">🛵</span>
+              <span>{activeCaptains} active captain{activeCaptains === 1 ? "" : "s"} nearby</span>
+            </div>
+          )}
 
           {/* Recenter button */}
           <button
