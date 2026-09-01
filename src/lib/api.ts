@@ -1,10 +1,24 @@
 
-// The RIDEHER backend sends no CORS headers, so browser calls go through our own
-// same-origin proxy route (which forwards the caller's bearer token upstream).
-const API_URL = '/api/public/rh';
+// Primary: call the RIDEHER backend directly. If the browser blocks the call
+// (CORS / network), we transparently retry through our own same-origin proxy
+// route, which forwards the caller's bearer token upstream unchanged.
+const DIRECT_API_URL =
+  (import.meta.env['VITE_EXTERNAL_API_URL'] as string | undefined)?.replace(/\/$/, '') ??
+  'https://api.rideher.in/api/v1';
+const PROXY_API_URL = '/api/public/rh';
+let API_URL = DIRECT_API_URL;
+
+function fallbackToProxy() {
+  if (API_URL !== PROXY_API_URL) {
+    console.warn('Direct RIDEHER API call blocked; falling back to same-origin proxy.');
+    API_URL = PROXY_API_URL;
+  }
+}
+
 const ACCESS_TOKEN_KEY = 'rh_access_token';
 const REFRESH_TOKEN_KEY = 'rh_refresh_token';
 const USER_KEY = 'rh_user';
+
 
 export type AuthUser = {
   id: string;
