@@ -126,18 +126,32 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   let response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers,
-    });
+    response = await fetch(`${API_URL}${path}`, { ...init, headers });
   } catch (e: any) {
-    console.error(`API fetch error (${path}):`, e);
-    throw new RequestError(503, { 
-      code: 'FETCH_ERROR', 
-      message: 'Unable to connect to RIDEHER server. Please check your internet connection.',
-      requestId: 'internal'
-    });
+    // A CORS rejection or network failure surfaces as a TypeError — retry once
+    // through the same-origin proxy before giving up.
+    if (API_URL !== PROXY_API_URL) {
+      fallbackToProxy();
+      try {
+        response = await fetch(`${PROXY_API_URL}${path}`, { ...init, headers });
+      } catch (e2: any) {
+        console.error(`API fetch error (${path}):`, e2);
+        throw new RequestError(503, {
+          code: 'FETCH_ERROR',
+          message: 'Unable to connect to RIDEHER server. Please check your internet connection.',
+          requestId: 'internal',
+        });
+      }
+    } else {
+      console.error(`API fetch error (${path}):`, e);
+      throw new RequestError(503, {
+        code: 'FETCH_ERROR',
+        message: 'Unable to connect to RIDEHER server. Please check your internet connection.',
+        requestId: 'internal',
+      });
+    }
   }
+
 
   if (response.status === 401 && storage.getRefreshToken()) {
     if (!isRefreshing) {
