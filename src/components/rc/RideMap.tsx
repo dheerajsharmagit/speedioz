@@ -309,9 +309,9 @@ export function RideMap({
         icon: {
           path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z",
           scale: 1.4,
-          fillColor: markersRef.current.captainFill,
+          fillColor: "#EF4444",
           fillOpacity: 1,
-          strokeColor: markersRef.current.captainStroke,
+          strokeColor: "#991B1B",
           strokeWeight: 2,
           rotation: 0,
         },
@@ -356,9 +356,9 @@ export function RideMap({
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 22,
-          fillColor: markersRef.current.userFill,
+          fillColor: "#EC4899",
           fillOpacity: 0.15,
-          strokeColor: markersRef.current.userFill,
+          strokeColor: "#EC4899",
           strokeOpacity: 0.25,
           strokeWeight: 1,
         },
@@ -375,7 +375,7 @@ export function RideMap({
         icon: {
           path: g.maps.SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: markersRef.current.userFill,
+          fillColor: "#EC4899",
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,
@@ -402,18 +402,18 @@ export function RideMap({
     });
     captainMarkerRef.current?.setIcon({
       path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z", scale: 1.4,
-      fillColor: markers.captainFill, fillOpacity: 1,
-      strokeColor: markers.captainStroke, strokeWeight: 2, rotation: 0,
+      fillColor: "#EF4444", fillOpacity: 1,
+      strokeColor: "#991B1B", strokeWeight: 2, rotation: 0,
     });
     userMarkerRef.current?.setIcon({
       path: g.maps.SymbolPath.CIRCLE, scale: 7,
-      fillColor: markers.userFill, fillOpacity: 1,
+      fillColor: "#EC4899", fillOpacity: 1,
       strokeColor: "#ffffff", strokeWeight: 2,
     });
     userAccuracyRef.current?.setIcon({
       path: g.maps.SymbolPath.CIRCLE, scale: 22,
-      fillColor: markers.userFill, fillOpacity: 0.15,
-      strokeColor: markers.userFill, strokeOpacity: 0.25, strokeWeight: 1,
+      fillColor: "#EC4899", fillOpacity: 0.15,
+      strokeColor: "#EC4899", strokeOpacity: 0.25, strokeWeight: 1,
     });
   }, [markers, mapReady]);
 
@@ -496,5 +496,4 @@ export function RideMap({
     </div>
   );
 }
-
 

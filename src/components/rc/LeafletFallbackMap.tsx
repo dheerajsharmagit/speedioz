@@ -103,16 +103,16 @@ export function LeafletFallbackMap({
     else dropRef.current.setLatLng([drop.lat, drop.lng]).setIcon(makeDot(L, markers.dropFill, markers.dropStroke));
 
     if (captain) {
-      if (!captainRef.current) captainRef.current = L.marker([captain.lat, captain.lng], { icon: makeDot(L, markers.captainFill, markers.captainStroke, 18) }).addTo(map);
-      else captainRef.current.setLatLng([captain.lat, captain.lng]);
+      if (!captainRef.current) captainRef.current = L.marker([captain.lat, captain.lng], { icon: makeDot(L, "#EF4444", "#991B1B", 18) }).addTo(map);
+      else captainRef.current.setLatLng([captain.lat, captain.lng]).setIcon(makeDot(L, "#EF4444", "#991B1B", 18));
     } else if (captainRef.current) {
       captainRef.current.remove();
       captainRef.current = null;
     }
 
     if (userLocation) {
-      if (!userRef.current) userRef.current = L.marker([userLocation.lat, userLocation.lng], { icon: makeDot(L, markers.userFill, "#ffffff", 14) }).addTo(map);
-      else userRef.current.setLatLng([userLocation.lat, userLocation.lng]);
+      if (!userRef.current) userRef.current = L.marker([userLocation.lat, userLocation.lng], { icon: makeDot(L, "#EC4899", "#ffffff", 14) }).addTo(map);
+      else userRef.current.setLatLng([userLocation.lat, userLocation.lng]).setIcon(makeDot(L, "#EC4899", "#ffffff", 14));
     } else if (userRef.current) {
       userRef.current.remove();
       userRef.current = null;
