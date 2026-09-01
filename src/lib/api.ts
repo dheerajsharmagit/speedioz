@@ -154,21 +154,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 
   if (response.status === 401 && storage.getRefreshToken()) {
+    let retryToken: string;
     if (!isRefreshing) {
       isRefreshing = true;
       try {
-        const newToken = await refreshToken();
-        isRefreshing = false;
-        onRefreshed(newToken);
+        retryToken = await refreshToken();
+        onRefreshed(retryToken);
       } catch (e) {
-        isRefreshing = false;
+        storage.clearAuth();
         throw e;
+      } finally {
+        isRefreshing = false;
       }
+    } else {
+      retryToken = await new Promise<string>((resolve) => {
+        addRefreshSubscriber(resolve);
+      });
     }
-
-    const retryToken = await new Promise<string>((resolve) => {
-      addRefreshSubscriber((token) => resolve(token));
-    });
 
     const retryHeaders = new Headers(init.headers);
     retryHeaders.set('Content-Type', 'application/json');
