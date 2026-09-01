@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, captainAvailabilityApi, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
+import { API_BASE_URL, captainAvailabilityApi, captainMapApi, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -232,6 +232,7 @@ function RidePage() {
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
   const [fareQuote, setFareQuote] = useState<number | null>(null);
   const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
+  const [nearbyCaptains, setNearbyCaptains] = useState<{ lat: number; lng: number }[]>([]);
 
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -446,6 +447,16 @@ function RidePage() {
     return () => window.clearInterval(interval);
   }, [selected]);
 
+  useEffect(() => {
+    const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
+    const refreshMapCaptains = () => captainMapApi.get(pickup.lat, pickup.lng, vehicleType)
+      .then((response) => setNearbyCaptains(response.data.captains))
+      .catch(() => setNearbyCaptains([]));
+    refreshMapCaptains();
+    const interval = window.setInterval(refreshMapCaptains, 30000);
+    return () => window.clearInterval(interval);
+  }, [pickup.lat, pickup.lng, selected]);
+
   async function createRide() {
     if (!dest) return;
     setCreating(true);
@@ -624,6 +635,7 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
             captain={captainPos}
+            nearbyCaptains={ride ? [] : nearbyCaptains}
             userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
             routeLoading={routeLoading}

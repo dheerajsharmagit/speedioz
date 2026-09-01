@@ -227,6 +227,11 @@ export const captainAvailabilityApi = {
     api<{ data: { activeCaptains: number } }>(`/captains/availability${vehicleType ? `?vehicleType=${vehicleType}` : ""}`),
 };
 
+export const captainMapApi = {
+  get: (lat: number, lng: number, vehicleType?: "BIKE" | "AUTO" | "CAB") =>
+    api<{ data: { captains: { lat: number; lng: number; vehicleType: string }[] } }>(`/captains/map-captains?lat=${lat}&lng=${lng}${vehicleType ? `&vehicleType=${vehicleType}` : ""}`),
+};
+
 export type CanonicalRideStatus =
   | 'SEARCHING'
   | 'MATCHED'

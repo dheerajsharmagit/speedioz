@@ -24,6 +24,7 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
+  nearbyCaptains?: LatLng[];
   userLocation?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
@@ -52,6 +53,7 @@ export function RideMap({
   pickup, 
   drop, 
   captain, 
+  nearbyCaptains = [],
   userLocation, 
   polyline, 
   className, 
@@ -66,6 +68,7 @@ export function RideMap({
   const pickupMarkerRef = useRef<GoogleMarker | null>(null);
   const dropMarkerRef = useRef<GoogleMarker | null>(null);
   const captainMarkerRef = useRef<GoogleMarker | null>(null);
+  const nearbyCaptainMarkersRef = useRef<GoogleMarker[]>([]);
   const userMarkerRef = useRef<GoogleMarker | null>(null);
   const userAccuracyRef = useRef<GoogleMarker | null>(null);
   const polylineRef = useRef<GooglePolyline | null>(null);
@@ -318,6 +321,21 @@ export function RideMap({
     }
   }, [captain]);
 
+  // Availability scooters are approximate, anonymous nearby captain markers.
+  useEffect(() => {
+    const g = window.google;
+    if (!mapRef.current || !g) return;
+    nearbyCaptainMarkersRef.current.forEach((marker) => marker.setMap(null));
+    nearbyCaptainMarkersRef.current = nearbyCaptains.map((position) => new g.maps.Marker({
+      position,
+      map: mapRef.current,
+      title: "Available captain nearby",
+      clickable: false,
+      zIndex: 3,
+      label: { text: "🛵", fontSize: "18px" },
+    }));
+  }, [nearbyCaptains, mapReady]);
+
   // User's live location marker (blue dot).
   useEffect(() => {
     const g = window.google;
@@ -478,6 +496,5 @@ export function RideMap({
     </div>
   );
 }
-
 
 
