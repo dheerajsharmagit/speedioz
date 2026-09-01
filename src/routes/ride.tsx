@@ -954,6 +954,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               setSelected={setSelected}
               useSmartRoute={useSmartRoute}
               setUseSmartRoute={setUseSmartRoute}
+              quote={fareQuote}
               onNext={() => setStep("confirm")}
             />
           )}
@@ -1188,12 +1189,13 @@ function DestinationStep({
 
 /* ---------- Vehicle ---------- */
 function VehicleStep({
-  selected, setSelected, useSmartRoute, setUseSmartRoute, onNext,
+  selected, setSelected, useSmartRoute, setUseSmartRoute, quote, onNext,
 }: {
   selected: string;
   setSelected: (v: string) => void;
   useSmartRoute: boolean;
   setUseSmartRoute: (v: boolean) => void;
+  quote: number | null;
   onNext: () => void;
 }) {
   return (
@@ -1219,7 +1221,7 @@ function VehicleStep({
                 {v.note ? <span className="ml-1 text-accent">·{v.note}</span> : null}
               </p>
               <p className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}>
-                ₹{v.price}
+                {active && quote !== null ? `₹${quote}` : "Get quote"}
               </p>
               <p className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}>
                 {v.eta.toUpperCase()} ETA
@@ -1337,10 +1339,8 @@ function ConfirmStep({
           </div>
           <div className="my-3 h-px bg-border" />
           <div className="space-y-1 text-xs">
-            <Row label="Base fare" value={`₹${vehicle.price}`} />
+            <Row label="Route-based fare estimate" value={`₹${fare}`} />
             <Row label="Smart Route" value={useSmartRoute ? `−${smartSavings} min saved` : "—"} accent={useSmartRoute} />
-            <Row label="Platform fee" value="₹4" />
-            <Row label="Taxes" value="₹3" />
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
             <p className="text-sm font-bold">Total</p>
