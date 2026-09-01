@@ -199,7 +199,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 // Auth methods
 export const authApi = {
   signup: (data: any) => api<AuthResponse>('/auth/signup/customer', { method: 'POST', body: JSON.stringify(data) }),
-  login: (data: any) => api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data: any) => api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ ...data, expectedRole: 'CUSTOMER' }) }),
   signupGoogle: (credential: string) => api<AuthResponse>('/auth/signup/google', { method: 'POST', body: JSON.stringify({ credential }) }),
   loginGoogle: (credential: string) => api<AuthResponse>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
   logout: () => api('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: storage.getRefreshToken() }) }).finally(() => storage.clearAuth()),
