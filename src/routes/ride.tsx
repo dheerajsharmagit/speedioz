@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { storage, rideApi } from "@/lib/api";
+import { API_BASE_URL, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -139,6 +139,45 @@ function stepFromStatus(status: RideStatus): UiStep {
   }
 }
 
+function mapRideStatus(status: string | undefined): RideStatus {
+  switch (status) {
+    case "SEARCHING": return "searching";
+    case "MATCHED": return "accepted";
+    case "ARRIVING": return "arriving";
+    case "IN_PROGRESS": return "in_progress";
+    case "COMPLETED": return "completed";
+    case "CANCELLED": return "cancelled";
+    default: return (status as RideStatus) || "searching";
+  }
+}
+
+function toClientRide(source: CanonicalRide | BookingDetails): Ride {
+  const details = source as BookingDetails;
+  const ride = source as CanonicalRide;
+  const pickup = details.pickup ?? { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress };
+  const drop = details.drop ?? { lat: ride.dropLat, lng: ride.dropLng, address: ride.dropAddress };
+  return {
+    id: details.rideId ?? ride.id,
+    rider_user_id: "",
+    pickup_label: pickup.address,
+    pickup_lat: pickup.lat,
+    pickup_lng: pickup.lng,
+    drop_label: drop.address,
+    drop_lat: drop.lat,
+    drop_lng: drop.lng,
+    vehicle_type: (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab" ? "auto" : (details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev",
+    fare_inr: details.fareEstimate ?? ride.fareEstimate,
+    status: mapRideStatus(details.status ?? ride.status),
+    otp: "",
+    captain_name: details.captain?.name,
+    captain_phone: details.captain?.phone ?? undefined,
+    captain_lat: details.captainLocation?.lat,
+    captain_lng: details.captainLocation?.lng,
+    captain_avatar: details.captain?.avatarUrl ?? undefined,
+    created_at: "",
+  };
+}
+
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -271,64 +310,32 @@ function RidePage() {
     if (!ride?.id) return;
 
     const token = storage.getAccessToken();
-    const socket = io("https://api.rideher.in", {
-      auth: { token: `Bearer ${token}` },
+    const socket = io(API_BASE_URL.replace("/api/v1", ""), {
+      auth: { token },
       transports: ["websocket", "polling"],
       withCredentials: true
     });
 
-    socket.on("connect", () => {
-      console.log("Socket connected, joining ride:", ride.id);
-      socket.emit("join-ride", ride.id);
-    });
-
-    const handleUpdate = (updatedRide: any) => {
-      console.log("Ride update received:", updatedRide);
-      // Map backend snake_case to frontend expected fields if necessary, 
-      // but assuming the backend provides the correct structure or we adapt
-      const mappedRide = {
-        ...updatedRide,
-        pickup_lat: updatedRide.pickup_latitude ?? updatedRide.pickup_lat,
-        pickup_lng: updatedRide.pickup_longitude ?? updatedRide.pickup_lng,
-        drop_lat: updatedRide.drop_latitude ?? updatedRide.drop_lat,
-        drop_lng: updatedRide.drop_longitude ?? updatedRide.drop_lng,
-      };
-      setRide(mappedRide);
-      setStep(stepFromStatus(mappedRide.status as RideStatus));
-      
-      const cLat = mappedRide.captain_lat ?? mappedRide.captain_latitude;
-      const cLng = mappedRide.captain_lng ?? mappedRide.captain_longitude;
-      if (cLat && cLng) {
-        setCaptainPos({ lat: cLat, lng: cLng });
+    const refreshBooking = async () => {
+      try {
+        const response = await rideApi.bookingDetails(ride.id);
+        const updatedRide = toClientRide(response.data);
+        setRide(updatedRide);
+        setStep(stepFromStatus(updatedRide.status));
+        if (response.data.captainLocation) setCaptainPos(response.data.captainLocation);
+      } catch (error) {
+        console.warn("Could not refresh ride booking details", error);
       }
     };
 
-    socket.on("ride.created", handleUpdate);
-    socket.on("ride.assigned", handleUpdate);
-    socket.on("ride.accepted", handleUpdate);
-    socket.on("ride.rejected", (data: any) => {
-      console.log("Ride rejected by captain:", data);
-      // Backend will find another captain, we just stay in searching step
-      // The ride object might be updated with new status if all captains reject
-      if (data.status) {
-        setStep(stepFromStatus(data.status as RideStatus));
-      }
-    });
-    socket.on("ride.arriving", handleUpdate);
-    socket.on("ride.arrived", handleUpdate);
-    socket.on("ride.started", handleUpdate);
-    socket.on("ride.completed", handleUpdate);
-    socket.on("ride.cancelled", (data: any) => {
-      handleUpdate(data);
-      alert("Ride was cancelled.");
-    });
-
-    // Also listen for captain location updates
-    socket.on("captain.location", (loc: any) => {
-      const lat = loc.lat ?? loc.latitude;
-      const lng = loc.lng ?? loc.longitude;
-      if (lat && lng) {
-        setCaptainPos({ lat, lng });
+    socket.on("ride:matched", refreshBooking);
+    socket.on("ride:arriving", refreshBooking);
+    socket.on("ride:started", refreshBooking);
+    socket.on("ride:completed", refreshBooking);
+    socket.on("ride:cancelled", (data: { rideId?: string; status?: string }) => {
+      if (data.rideId === ride.id) {
+        setRide((current) => current ? { ...current, status: mapRideStatus(data.status) } : current);
+        setStep("cancelled");
       }
     });
 
@@ -412,7 +419,7 @@ function RidePage() {
     if (!dest) return;
     setCreating(true);
     try {
-      const data = await rideApi.create({
+      const response = await rideApi.create({
         pickupAddress: pickup.label,
         pickupLat: pickup.lat,
         pickupLng: pickup.lng,
@@ -421,11 +428,9 @@ function RidePage() {
         dropLng: dest.lng,
         // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
         vehicleType: selected === "ev" ? "BIKE" : selected.toUpperCase(),
-        fareInr: fare,
-        useSmartRoute,
-        paymentMethod: payment.toUpperCase(),
+        paymentMethod: payment === "upi" ? "UPI" : payment === "cash" ? "CASH" : "CARD",
       });
-      setRide(data as Ride);
+      setRide(toClientRide(response.data));
       setStep("searching");
     } catch (e: any) {
       console.error(e);
@@ -442,7 +447,7 @@ function RidePage() {
 
   async function cancelSearch() {
     if (ride) {
-      await rideApi.updateStatus(ride.id, "cancelled");
+      await rideApi.cancel(ride.id, "Cancelled by customer");
     }
     setRide(null);
     setEncodedPolyline("");
@@ -455,7 +460,7 @@ function RidePage() {
 
   async function submitRating() {
     if (!ride) return;
-    await rideApi.rate(ride.id, { rating, tip_inr: tip });
+    await rideApi.rate(ride.id, { stars: rating, tip });
     // reset
     setRide(null);
     setDest(null);

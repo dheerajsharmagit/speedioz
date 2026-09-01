@@ -2,11 +2,11 @@
 // Primary: call the RIDEHER backend directly. If the browser blocks the call
 // (CORS / network), we transparently retry through our own same-origin proxy
 // route, which forwards the caller's bearer token upstream unchanged.
-const DIRECT_API_URL =
+export const API_BASE_URL =
   (import.meta.env['VITE_EXTERNAL_API_URL'] as string | undefined)?.replace(/\/$/, '') ??
   'https://api.rideher.in/api/v1';
 const PROXY_API_URL = '/api/public/rh';
-let API_URL = DIRECT_API_URL;
+let API_URL = API_BASE_URL;
 
 function fallbackToProxy() {
   if (API_URL !== PROXY_API_URL) {
@@ -206,11 +206,60 @@ export const authApi = {
 
 // Ride methods
 export const rideApi = {
-  create: (data: any) => api<any>('/rides/request', { method: 'POST', body: JSON.stringify(data) }),
-  get: (id: string) => api<any>(`/rides/${id}/booking-details`),
-  updateStatus: (id: string, status: string) => api(`/rides/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  rate: (id: string, data: any) => api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
-  updateLocation: (id: string, lat: number, lng: number) => api(`/rides/${id}/location`, { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+  create: (data: RideRequest) =>
+    api<{ data: CanonicalRide }>('/rides/request', { method: 'POST', body: JSON.stringify(data) }),
+  bookingDetails: (id: string) => api<{ data: BookingDetails }>(`/rides/${id}/booking-details`),
+  cancel: (id: string, reason: string) =>
+    api<{ data: CanonicalRide }>(`/rides/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  rate: (id: string, data: { stars: number; tip?: number }) =>
+    api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export type CanonicalRideStatus =
+  | 'SEARCHING'
+  | 'MATCHED'
+  | 'ARRIVING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type RideRequest = {
+  pickupLat: number;
+  pickupLng: number;
+  pickupAddress: string;
+  dropLat: number;
+  dropLng: number;
+  dropAddress: string;
+  vehicleType: 'BIKE' | 'AUTO' | 'CAB';
+  paymentMethod: 'CASH' | 'CARD' | 'UPI';
+};
+
+export type CanonicalRide = RideRequest & {
+  id: string;
+  status: CanonicalRideStatus;
+  fareEstimate: number;
+  fareFinal?: number | null;
+  distanceMeters: number;
+  durationSeconds: number;
+  captainId?: string | null;
+};
+
+export type BookingDetails = {
+  rideId: string;
+  status: CanonicalRideStatus;
+  pickup: { lat: number; lng: number; address: string };
+  drop: { lat: number; lng: number; address: string };
+  fareEstimate: number;
+  distanceMeters: number;
+  durationSeconds: number;
+  vehicleType: 'BIKE' | 'AUTO' | 'CAB';
+  captain: {
+    id: string;
+    name: string;
+    phone: string | null;
+    avatarUrl: string | null;
+  } | null;
+  captainLocation: { lat: number; lng: number } | null;
 };
 
 // User methods
