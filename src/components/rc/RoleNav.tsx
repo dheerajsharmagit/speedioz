@@ -23,8 +23,8 @@ export function RoleNav() {
     user ? { to: "#logout", label: "Logout", onClick: async () => { await authApi.logout(); window.location.href = "/"; } } : { to: "/auth", label: "Sign in" },
   ] as const;
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-      <div className="flex items-center gap-1 rounded-full border border-border bg-card/90 p-1 shadow-xl backdrop-blur">
+    <nav aria-label="Main menu" className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-lg backdrop-blur">
+      <div className="mx-auto flex max-w-[430px] items-center justify-around gap-1">
         {roles.map((r: any) => {
           const active = pathname === r.to;
           if (r.onClick) {
@@ -32,7 +32,7 @@ export function RoleNav() {
               <button
                 key={r.label}
                 onClick={r.onClick}
-                className="rounded-full px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider transition text-muted-foreground hover:text-foreground cursor-pointer"
+                className="min-w-12 rounded-lg px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider transition text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 {r.label}
               </button>
@@ -42,8 +42,8 @@ export function RoleNav() {
             <Link
               key={r.to}
               to={r.to}
-              className={`rounded-full px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider transition ${
-                active ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`min-w-12 rounded-lg px-2 py-2 text-center font-mono text-[10px] font-semibold uppercase tracking-wider transition ${
+                active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {r.label}
@@ -51,6 +51,6 @@ export function RoleNav() {
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }

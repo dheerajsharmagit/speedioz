@@ -217,6 +217,11 @@ export const rideApi = {
     api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
+export const fareApi = {
+  estimate: (data: { vehicleType: "BIKE" | "AUTO" | "CAB"; distanceMeters: number; durationSeconds: number }) =>
+    api<{ data: { min: number; max: number } }>("/fares/estimate", { method: "POST", body: JSON.stringify(data) }),
+};
+
 export type CanonicalRideStatus =
   | 'SEARCHING'
   | 'MATCHED'

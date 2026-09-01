@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
+import { API_BASE_URL, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -230,6 +230,7 @@ function RidePage() {
   const firstFixRef = useRef(false);
 
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
+  const [fareQuote, setFareQuote] = useState<number | null>(null);
 
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -302,7 +303,7 @@ function RidePage() {
   }, []);
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
-  const fare = vehicle.price + (useSmartRoute ? 0 : 8);
+  const fare = fareQuote ?? vehicle.price;
   const smartSavings = 12;
 
   // Real-time ride updates via Socket.IO
@@ -414,6 +415,25 @@ function RidePage() {
     })();
     return () => { cancelled = true; };
   }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, selected]);
+
+  // Quotes are calculated by the same backend fare rules used when the ride is created.
+  useEffect(() => {
+    if (!routeInfo || routeInfo.distanceMeters <= 0 || routeInfo.durationSeconds <= 0) {
+      setFareQuote(null);
+      return;
+    }
+    let cancelled = false;
+    fareApi.estimate({
+      vehicleType: selected === "ev" ? "BIKE" : selected === "auto" ? "AUTO" : "BIKE",
+      distanceMeters: routeInfo.distanceMeters,
+      durationSeconds: routeInfo.durationSeconds,
+    }).then((response) => {
+      if (!cancelled) setFareQuote(response.data.max);
+    }).catch(() => {
+      if (!cancelled) setFareQuote(null);
+    });
+    return () => { cancelled = true; };
+  }, [routeInfo?.distanceMeters, routeInfo?.durationSeconds, selected]);
 
   async function createRide() {
     if (!dest) return;
