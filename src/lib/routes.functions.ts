@@ -10,14 +10,39 @@ const routeInput = z.object({
   travelMode: z.enum(["DRIVE", "TWO_WHEELER"]).default("TWO_WHEELER"),
 });
 
+type RouteResponse = {
+  encodedPolyline: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  steps: Array<never>;
+};
+
+// This runs on the server-function runtime, so it does not expose a routing
+// provider to the browser. OSRM's geometry is a standard encoded polyline and
+// lets the Leaflet fallback show roads when Google Maps is not configured.
+async function computeOsrmRoute(data: z.infer<typeof routeInput>): Promise<RouteResponse> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${data.origin.lng},${data.origin.lat};${data.destination.lng},${data.destination.lat}?overview=full&geometries=polyline`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Road route failed (${response.status})`);
+  const payload = (await response.json()) as {
+    routes?: Array<{ geometry?: string; distance?: number; duration?: number }>;
+  };
+  const route = payload.routes?.[0];
+  if (!route?.geometry) throw new Error("No road route found");
+  return {
+    encodedPolyline: route.geometry,
+    distanceMeters: Math.round(route.distance ?? 0),
+    durationSeconds: Math.round(route.duration ?? 0),
+    steps: [],
+  };
+}
+
 export const computeRoute = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => routeInput.parse(input))
   .handler(async ({ data }) => {
     const lovableKey = process.env.LOVABLE_API_KEY;
     const gmKey = process.env.GOOGLE_MAPS_API_KEY;
-    if (!lovableKey || !gmKey) {
-      throw new Error("Google Maps connector is not configured");
-    }
+    if (!lovableKey || !gmKey) return computeOsrmRoute(data);
 
     const body = {
       origin: { location: { latLng: { latitude: data.origin.lat, longitude: data.origin.lng } } },
@@ -46,21 +71,15 @@ export const computeRoute = createServerFn({ method: "POST" })
     });
 
     if (response.status === 403) {
-      const err = (await response.json().catch(() => null)) as { error?: { details?: Array<{ reason?: string }> } } | null;
-      const reason = err?.error?.details?.find((d) => d.reason)?.reason;
-      if (reason === "API_KEY_HTTP_REFERRER_BLOCKED") {
-        throw new Error("Google Maps server key is referrer-restricted. Set its application restrictions to 'None' or 'IP addresses' in Google Cloud Console.");
-      }
-      if (reason === "API_KEY_SERVICE_BLOCKED") {
-        throw new Error("Google Maps server key does not allow the Routes API. Add it to the key's allowed-APIs list.");
-      }
-      throw new Error("Google Maps Routes request was denied (403).");
+      // A referrer-restricted or disabled Google key must not turn the map
+      // into an aerial line. Use the server-side road-route fallback instead.
+      return computeOsrmRoute(data);
     }
 
     if (!response.ok) {
       const errorBody = await response.text();
       console.error(`Routes API failed [${response.status}]: ${errorBody}`);
-      throw new Error(`Routes API failed (${response.status})`);
+      return computeOsrmRoute(data);
     }
 
     const payload = (await response.json()) as {
@@ -80,9 +99,7 @@ export const computeRoute = createServerFn({ method: "POST" })
     };
 
     const route = payload.routes?.[0];
-    if (!route?.polyline?.encodedPolyline) {
-      return { encodedPolyline: "", distanceMeters: 0, durationSeconds: 0, steps: [] };
-    }
+    if (!route?.polyline?.encodedPolyline) return computeOsrmRoute(data);
 
     // duration is a Duration string like "1234s"
     const durationSeconds = route.duration ? parseInt(route.duration.replace(/[^0-9]/g, ""), 10) : 0;

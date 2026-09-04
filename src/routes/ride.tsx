@@ -171,6 +171,9 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     otp: details.otp ?? "",
     captain_name: details.captain?.name,
     captain_phone: details.captain?.phone ?? undefined,
+    captain_vehicle: details.captain?.vehicleModel ?? details.captain?.vehicleType ?? undefined,
+    captain_plate: details.captain?.vehicleNumber ?? undefined,
+    captain_rating: details.captain?.rating ?? undefined,
     captain_lat: details.captainLocation?.lat,
     captain_lng: details.captainLocation?.lng,
     captain_avatar: details.captain?.avatarUrl ?? undefined,
@@ -364,8 +367,11 @@ function RidePage() {
       approachFetchedRef.current = null;
       return;
     }
-    if (approachFetchedRef.current === ride.id) return;
-    approachFetchedRef.current = ride.id;
+    // Recompute when the captain's live position changes; otherwise the
+    // approach line stays anchored at the first reported location.
+    const approachKey = `${ride.id}:${captainPos.lat.toFixed(5)}:${captainPos.lng.toFixed(5)}`;
+    if (approachFetchedRef.current === approachKey) return;
+    approachFetchedRef.current = approachKey;
     (async () => {
       try {
         const res = await computeRoute({

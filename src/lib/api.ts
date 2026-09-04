@@ -275,6 +275,10 @@ export type BookingDetails = {
     name: string;
     phone: string | null;
     avatarUrl: string | null;
+    vehicleType: 'BIKE' | 'AUTO' | 'CAB' | null;
+    vehicleNumber: string | null;
+    vehicleModel: string | null;
+    rating: number | null;
   } | null;
   captainLocation: { lat: number; lng: number } | null;
   otp?: string;
