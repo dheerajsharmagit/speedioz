@@ -168,7 +168,7 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     vehicle_type: (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab" ? "auto" : (details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev",
     fare_inr: details.fareEstimate ?? ride.fareEstimate,
     status: mapRideStatus(details.status ?? ride.status),
-    otp: "",
+    otp: details.otp ?? "",
     captain_name: details.captain?.name,
     captain_phone: details.captain?.phone ?? undefined,
     captain_lat: details.captainLocation?.lat,
@@ -206,6 +206,7 @@ function RidePage() {
   const [selected, setSelected] = useState("bike");
   const [pickup, setPickup] = useState<Pickup>(DEFAULT_PICKUP);
   const [pickupQuery, setPickupQuery] = useState("");
+  const [pickupConfirmed, setPickupConfirmed] = useState(false);
   const [locating, setLocating] = useState(true);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoError, setGeoError] = useState<null | "denied" | "unavailable" | "timeout">(null);
@@ -247,6 +248,7 @@ function RidePage() {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(p);
         setPickup({ label: "Current location", ...p });
+        setPickupConfirmed(true);
         firstFixRef.current = true;
         setLocating(false);
         reverseGeocode(p.lat, p.lng).then((addr) => {
@@ -286,6 +288,7 @@ function RidePage() {
         setGeoError(null);
         if (!firstFixRef.current) {
           setPickup({ label: "Current location", ...p });
+          setPickupConfirmed(true);
           firstFixRef.current = true;
           setLocating(false);
           reverseGeocode(p.lat, p.lng).then((addr) => {
@@ -342,8 +345,14 @@ function RidePage() {
       }
     });
 
+    // Socket delivery is immediate when available. Polling keeps the customer
+    // portal in sync when Socket.IO is blocked by browser or deployment CORS.
+    void refreshBooking();
+    const pollId = window.setInterval(() => void refreshBooking(), 5000);
+
     return () => {
       socket.disconnect();
+      window.clearInterval(pollId);
     };
   }, [ride?.id]);
 
@@ -459,6 +468,11 @@ function RidePage() {
 
   async function createRide() {
     if (!dest) return;
+    if (!pickupConfirmed) {
+      alert("Confirm your pickup location before booking a ride.");
+      setStep("destination");
+      return;
+    }
     setCreating(true);
     try {
       const response = await rideApi.create({
@@ -928,7 +942,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
           {step === "destination" && (
             <DestinationStep
               pickup={pickup}
-              setPickup={(p) => { setPickup(p); setPickupQuery(p.label); }}
+              setPickup={(p) => { setPickup(p); setPickupQuery(p.label); setPickupConfirmed(true); }}
               pickupQuery={pickupQuery}
               setPickupQuery={setPickupQuery}
               useCurrentLocation={() => {
@@ -940,6 +954,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
                     const lng = pos.coords.longitude;
                     setPickup({ label: "Current location", lat, lng });
                     setPickupQuery("");
+                    setPickupConfirmed(true);
                     setLocating(false);
                     reverseGeocode(lat, lng).then((addr) => {
                       if (addr) setPickup((prev) => (prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev));
@@ -950,6 +965,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
                 );
               }}
               locating={locating}
+              pickupConfirmed={pickupConfirmed}
               dest={dest}
               setDest={setDest}
               query={destQuery}
@@ -1080,6 +1096,7 @@ function DestinationStep({
   setPickupQuery,
   useCurrentLocation,
   locating,
+  pickupConfirmed,
   dest,
   setDest,
   query,
@@ -1093,6 +1110,7 @@ function DestinationStep({
   setPickupQuery: (v: string) => void;
   useCurrentLocation: () => void;
   locating: boolean;
+  pickupConfirmed: boolean;
   dest: PlaceResult | null;
   setDest: (v: PlaceResult | null) => void;
   query: string;
@@ -1187,11 +1205,11 @@ function DestinationStep({
 
       <div className="px-6 pb-12">
         <button
-          disabled={!dest}
+          disabled={!dest || !pickupConfirmed}
           onClick={onNext}
           className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Continue
+          {pickupConfirmed ? "Continue" : "Confirm pickup location"}
         </button>
       </div>
     </>

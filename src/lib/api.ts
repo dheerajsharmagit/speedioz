@@ -277,6 +277,7 @@ export type BookingDetails = {
     avatarUrl: string | null;
   } | null;
   captainLocation: { lat: number; lng: number } | null;
+  otp?: string;
 };
 
 // User methods
@@ -285,9 +286,9 @@ export const userApi = {
   updateMe: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
   getSavedPlaces: () => api<{ data: any[] }>('/users/me/saved-places'),
   addSavedPlace: (data: any) => api<{ data: any }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
-  getRideHistory: () => api<{ data: any[] }>('/users/me/rides'),
-  getProfile: () => api<{ user: AuthUser }>('/users/me/profile'),
-  updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+  getRideHistory: () => api<{ data: any[] }>('/rides/history/me'),
+  getProfile: () => api<{ user: AuthUser }>('/users/me'),
+  updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // Captain methods.
