@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { decodePolyline } from "@/lib/polyline";
 import { useTheme } from "@/lib/theme";
@@ -51,11 +51,37 @@ export function LeafletFallbackMap({
   const userRef = useRef<LMarker | null>(null);
   const polyRef = useRef<LPolyline | null>(null);
   const readyRef = useRef(false);
+  const [roadFallbackPolyline, setRoadFallbackPolyline] = useState("");
   const { markers } = useTheme();
 
+  // Google routing can be unavailable on a deployed customer portal. Fetch a
+  // road-following geometry directly for the Leaflet backup map instead of
+  // drawing an aerial line between the markers. OSRM enables browser CORS.
+  useEffect(() => {
+    if (polyline) {
+      setRoadFallbackPolyline("");
+      return;
+    }
+    const origin = captain ?? pickup;
+    const destination = captain ? pickup : drop;
+    if (origin.lat === destination.lat && origin.lng === destination.lng) return;
+    let cancelled = false;
+    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=polyline`;
+    void fetch(url)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Route request failed (${response.status})`)))
+      .then((payload: { routes?: Array<{ geometry?: string }> }) => {
+        if (!cancelled) setRoadFallbackPolyline(payload.routes?.[0]?.geometry ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setRoadFallbackPolyline("");
+      });
+    return () => { cancelled = true; };
+  }, [polyline, captain?.lat, captain?.lng, pickup.lat, pickup.lng, drop.lat, drop.lng]);
+
   // Track latest values so the async init effect uses current data.
-  const stateRef = useRef({ pickup, drop, captain, userLocation, polyline, markers });
-  stateRef.current = { pickup, drop, captain, userLocation, polyline, markers };
+  const effectivePolyline = polyline || roadFallbackPolyline;
+  const stateRef = useRef({ pickup, drop, captain, userLocation, polyline: effectivePolyline, markers });
+  stateRef.current = { pickup, drop, captain, userLocation, polyline: effectivePolyline, markers };
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +217,7 @@ export function LeafletFallbackMap({
   }
 
   useEffect(() => { if (readyRef.current) applyMarkers(); }, [pickup, drop, captain, userLocation, markers]);
-  useEffect(() => { if (readyRef.current) applyPolyline(); }, [polyline, markers, captain]);
+  useEffect(() => { if (readyRef.current) applyPolyline(); }, [effectivePolyline, markers, captain]);
   useEffect(() => { if (readyRef.current) applyBounds(); }, [pickup, drop, captain, polyline, fitKey]);
 
   return (

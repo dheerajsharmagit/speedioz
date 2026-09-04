@@ -259,6 +259,9 @@ export type CanonicalRide = RideRequest & {
   distanceMeters: number;
   durationSeconds: number;
   captainId?: string | null;
+  // Returned only to the customer who creates the request. The captain never
+  // receives this value; they enter it only after the customer shares it.
+  otp?: string;
 };
 
 export type BookingDetails = {

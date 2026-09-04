@@ -168,7 +168,9 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     vehicle_type: (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab" ? "auto" : (details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev",
     fare_inr: details.fareEstimate ?? ride.fareEstimate,
     status: mapRideStatus(details.status ?? ride.status),
-    otp: details.otp ?? "",
+    // Keep the OTP returned at booking time while the matched-details poll is
+    // in flight. It is deliberately not part of captain-facing responses.
+    otp: details.otp ?? ride.otp ?? "",
     captain_name: details.captain?.name,
     captain_phone: details.captain?.phone ?? undefined,
     captain_vehicle: details.captain?.vehicleModel ?? details.captain?.vehicleType ?? undefined,
