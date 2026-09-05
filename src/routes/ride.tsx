@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, captainAvailabilityApi, captainMapApi, fareApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
+import { API_BASE_URL, captainAvailabilityApi, captainMapApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -236,7 +236,7 @@ function RidePage() {
   const firstFixRef = useRef(false);
 
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
-  const [fareQuote, setFareQuote] = useState<number | null>(null);
+  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev", number>>>({});
   const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
   const [nearbyCaptains, setNearbyCaptains] = useState<{ lat: number; lng: number }[]>([]);
 
@@ -272,7 +272,11 @@ function RidePage() {
   useEffect(() => {
     deviceIdRef.current = getDeviceId();
     const user = storage.getUser();
-    if (!user) {
+    // A persisted profile without its token can happen after logout or a
+    // storage cleanup. Do not let the public map/fare effects send anonymous
+    // requests to customer-only API endpoints.
+    if (!user || !storage.getAccessToken()) {
+      storage.clearAuth();
       navigate({ to: "/auth", search: { mode: "signin" } });
       return;
     }
@@ -313,7 +317,7 @@ function RidePage() {
   }, []);
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
-  const fare = fareQuote ?? vehicle.price;
+  const fare = fareQuotes[selected as "bike" | "auto" | "ev"] ?? vehicle.price;
   const smartSavings = 12;
 
   // Real-time ride updates via Socket.IO
@@ -331,7 +335,13 @@ function RidePage() {
       try {
         const response = await rideApi.bookingDetails(ride.id);
         const updatedRide = toClientRide(response.data);
-        setRide(updatedRide);
+        // Some older API deployments omit the customer OTP from a later
+        // booking-details response. Never let that refresh erase the OTP we
+        // received when the customer created the ride or when it was matched.
+        setRide((current) => ({
+          ...updatedRide,
+          otp: updatedRide.otp || current?.otp || "",
+        }));
         setStep(stepFromStatus(updatedRide.status));
         if (response.data.captainLocation) setCaptainPos(response.data.captainLocation);
       } catch (error) {
@@ -339,14 +349,46 @@ function RidePage() {
       }
     };
 
-    socket.on("ride:matched", refreshBooking);
+    socket.on("ride:matched", (data: {
+      rideId?: string;
+      otp?: string;
+      captain?: { name?: string; phone?: string | null; avatarUrl?: string | null; vehicleModel?: string; vehicleType?: string; vehicleNumber?: string; rating?: number };
+      captainLocation?: { lat: number; lng: number } | null;
+    }) => {
+      if (data.rideId !== ride.id) return;
+      setRide((current) => current ? {
+        ...current,
+        status: "accepted",
+        otp: data.otp ?? current.otp,
+        captain_name: data.captain?.name ?? current.captain_name,
+        captain_phone: data.captain?.phone ?? current.captain_phone,
+        captain_avatar: data.captain?.avatarUrl ?? current.captain_avatar,
+        captain_vehicle: data.captain?.vehicleModel ?? data.captain?.vehicleType ?? current.captain_vehicle,
+        captain_plate: data.captain?.vehicleNumber ?? current.captain_plate,
+        captain_rating: data.captain?.rating ?? current.captain_rating,
+        captain_lat: data.captainLocation?.lat ?? current.captain_lat,
+        captain_lng: data.captainLocation?.lng ?? current.captain_lng,
+      } : current);
+      if (data.captainLocation) setCaptainPos(data.captainLocation);
+      setStep("matched");
+      void refreshBooking();
+    });
+    socket.on("captain:location", (data: { rideId?: string; lat?: number; lng?: number }) => {
+      if (data.rideId !== ride.id || typeof data.lat !== "number" || typeof data.lng !== "number") return;
+      setCaptainPos({ lat: data.lat, lng: data.lng });
+      setRide((current) => current ? { ...current, captain_lat: data.lat, captain_lng: data.lng } : current);
+    });
     socket.on("ride:arriving", refreshBooking);
     socket.on("ride:started", refreshBooking);
     socket.on("ride:completed", refreshBooking);
     socket.on("ride:cancelled", (data: { rideId?: string; status?: string }) => {
       if (data.rideId === ride.id) {
-        setRide((current) => current ? { ...current, status: mapRideStatus(data.status) } : current);
-        setStep("cancelled");
+        // Cancellation is terminal. Clear the active booking immediately so
+        // the rider is not trapped on a stale matched/current-ride screen.
+        setRide(null);
+        setApproachPolyline("");
+        setCaptainPos(null);
+        setStep("destination");
       }
     });
 
@@ -435,26 +477,35 @@ function RidePage() {
     return () => { cancelled = true; };
   }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, selected]);
 
-  // Quotes are calculated by the same backend fare rules used when the ride is created.
+  // Quotes are calculated by the same backend route and fare services used
+  // when a ride is created. The browser never supplies a fare to the API.
   useEffect(() => {
-    if (!routeInfo || routeInfo.distanceMeters <= 0 || routeInfo.durationSeconds <= 0) {
-      setFareQuote(null);
+    if (!dest || !storage.getAccessToken()) {
+      setFareQuotes({});
       return;
     }
     let cancelled = false;
-    fareApi.estimate({
-      vehicleType: selected === "ev" ? "BIKE" : selected === "auto" ? "AUTO" : "BIKE",
-      distanceMeters: routeInfo.distanceMeters,
-      durationSeconds: routeInfo.durationSeconds,
+    rideApi.estimate({
+      pickup: { latitude: pickup.lat, longitude: pickup.lng },
+      destination: { latitude: dest.lat, longitude: dest.lng },
     }).then((response) => {
-      if (!cancelled) setFareQuote(response.data.max);
+      if (cancelled) return;
+      const quotes: Partial<Record<"bike" | "auto" | "ev", number>> = {};
+      response.data.estimates.forEach((estimate) => {
+        if (estimate.vehicleType === "BIKE") { quotes.bike = estimate.max; quotes.ev = estimate.max; }
+        if (estimate.vehicleType === "AUTO") quotes.auto = estimate.max;
+      });
+      setFareQuotes(quotes);
+      setRouteInfo({ distanceMeters: response.data.distanceMeters, durationSeconds: response.data.durationSeconds });
+      if (response.data.polyline) setEncodedPolyline(response.data.polyline);
     }).catch(() => {
-      if (!cancelled) setFareQuote(null);
+      if (!cancelled) setFareQuotes({});
     });
     return () => { cancelled = true; };
-  }, [routeInfo?.distanceMeters, routeInfo?.durationSeconds, selected]);
+  }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng]);
 
   useEffect(() => {
+    if (!storage.getAccessToken()) return;
     const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
     const refreshAvailability = () => captainAvailabilityApi.get(vehicleType)
       .then((response) => setActiveCaptains(response.data.activeCaptains))
@@ -465,6 +516,7 @@ function RidePage() {
   }, [selected]);
 
   useEffect(() => {
+    if (!storage.getAccessToken()) return;
     const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
     const refreshMapCaptains = () => captainMapApi.get(pickup.lat, pickup.lng, vehicleType)
       .then((response) => setNearbyCaptains(response.data.captains))
@@ -476,6 +528,10 @@ function RidePage() {
 
   async function createRide() {
     if (!dest) return;
+    if (!storage.getAccessToken()) {
+      navigate({ to: "/auth", search: { mode: "signin" } });
+      return;
+    }
     if (!pickupConfirmed) {
       alert("Confirm your pickup location before booking a ride.");
       setStep("destination");
@@ -990,7 +1046,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               setSelected={setSelected}
               useSmartRoute={useSmartRoute}
               setUseSmartRoute={setUseSmartRoute}
-              quote={fareQuote}
+              quotes={fareQuotes}
               onNext={() => setStep("confirm")}
             />
           )}
@@ -1227,13 +1283,13 @@ function DestinationStep({
 
 /* ---------- Vehicle ---------- */
 function VehicleStep({
-  selected, setSelected, useSmartRoute, setUseSmartRoute, quote, onNext,
+  selected, setSelected, useSmartRoute, setUseSmartRoute, quotes, onNext,
 }: {
   selected: string;
   setSelected: (v: string) => void;
   useSmartRoute: boolean;
   setUseSmartRoute: (v: boolean) => void;
-  quote: number | null;
+  quotes: Partial<Record<"bike" | "auto" | "ev", number>>;
   onNext: () => void;
 }) {
   return (
@@ -1259,7 +1315,7 @@ function VehicleStep({
                 {v.note ? <span className="ml-1 text-accent">·{v.note}</span> : null}
               </p>
               <p className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}>
-                {active && quote !== null ? `₹${quote}` : "Get quote"}
+                {quotes[v.id as "bike" | "auto" | "ev"] ? `₹${quotes[v.id as "bike" | "auto" | "ev"]}` : "Get quote"}
               </p>
               <p className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}>
                 {v.eta.toUpperCase()} ETA
@@ -1475,7 +1531,7 @@ function MatchedStep({ ride }: { ride: Ride }) {
         <p className="font-mono text-[10px] uppercase tracking-widest text-accent">Captain matched</p>
         <h2 className="mt-2 text-2xl font-extrabold tracking-tight">{ride.captain_name ?? "On the way"}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          {ride.captain_rating ? `★ ${Number(ride.captain_rating).toFixed(1)}` : ""}
+          {ride.captain_rating ? `★ ${Number(ride.captain_rating).toFixed(1)}` : "Captain details are syncing…"}
         </p>
       </div>
 
@@ -1491,15 +1547,29 @@ function MatchedStep({ ride }: { ride: Ride }) {
             </p>
           </div>
           <div className="my-3 h-px bg-border" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase text-muted-foreground">Captain contact</p>
+              <p className="mt-1 truncate text-sm font-bold">{ride.captain_phone ?? "Available once the captain details load"}</p>
+            </div>
+            {ride.captain_phone && (
+              <a href={`tel:${ride.captain_phone}`} className="rounded-full border border-border px-3 py-1.5 text-xs font-bold">Call</a>
+            )}
+          </div>
+          <div className="my-3 h-px bg-border" />
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">Share OTP on pickup</p>
-            <div className="mt-2 flex gap-2">
-              {ride.otp.split("").map((d: string, i: number) => (
-                <span key={i} className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary">
-                  {d}
-                </span>
-              ))}
-            </div>
+            {ride.otp ? (
+              <div className="mt-2 flex gap-2">
+                {ride.otp.split("").map((d: string, i: number) => (
+                  <span key={i} className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">Securing your pickup OTP…</p>
+            )}
           </div>
         </div>
       </div>

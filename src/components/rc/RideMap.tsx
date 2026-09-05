@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type GoogleMap,
   type GoogleMarker,
@@ -9,12 +9,6 @@ import {
 } from "@/lib/google-maps-loader";
 
 import { useTheme } from "@/lib/theme";
-
-// Lazy so Leaflet (which touches `window` at import time) never loads on the
-// server. Importing it eagerly breaks SSR of the /ride route.
-const LeafletFallbackMap = lazy(() =>
-  import("./LeafletFallbackMap").then((m) => ({ default: m.LeafletFallbackMap })),
-);
 
 
 
@@ -117,8 +111,7 @@ export function RideMap({
         ],
       });
 
-      // If Google loaded but never painted tiles, switch to the backup map
-      // instead of leaving a silent blank panel.
+      // Surface an actionable error rather than switching map providers.
       tileCheck = setTimeout(() => {
         if (cancelled) return;
         const painted = containerRef.current?.querySelector(".gm-style");
@@ -429,27 +422,12 @@ export function RideMap({
 
   if (loadError) {
     return (
-      <div className={className ?? "relative h-full w-full"}>
-
-        <Suspense fallback={<div className="absolute inset-0 bg-muted" />}>
-          <LeafletFallbackMap
-            pickup={pickup}
-            drop={drop}
-            captain={captain}
-            userLocation={userLocation}
-            polyline={polyline}
-            className="absolute inset-0"
-            fitKey={fitKey}
-            routeLoading={routeLoading}
-            routeError={routeError}
-          />
-        </Suspense>
-
-        <div className="pointer-events-auto absolute right-2 top-2 flex items-center gap-2 rounded-full bg-background/95 px-3 py-1.5 text-[11px] shadow-md">
-          <span className="text-muted-foreground">Using backup map</span>
+      <div className={`${className ?? "relative h-full w-full"} grid place-items-center bg-muted p-5`}>
+        <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3 rounded-2xl bg-background p-4 text-center shadow-md">
+          <span className="text-xs font-semibold text-muted-foreground">Google Maps is unavailable. Check the API key and allowed domain.</span>
           <button
             onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); setRetryTick((n) => n + 1); }}
-            className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-secondary"
+            className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-secondary"
           >
             Retry
           </button>
@@ -496,4 +474,3 @@ export function RideMap({
     </div>
   );
 }
-

@@ -93,6 +93,15 @@ export const storage = {
   },
 };
 
+// Keep API code independent of the router while still allowing the app shell
+// to return the rider to sign-in as soon as a session can no longer be used.
+function expireSession() {
+  storage.clearAuth();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("rh:session-expired"));
+  }
+}
+
 async function refreshToken(): Promise<string> {
   const rt = storage.getRefreshToken();
   if (!rt) throw new Error('No refresh token');
@@ -104,7 +113,7 @@ async function refreshToken(): Promise<string> {
   });
 
   if (!res.ok) {
-    storage.clearAuth();
+    expireSession();
     throw new Error('Refresh failed');
   }
 
@@ -161,7 +170,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         retryToken = await refreshToken();
         onRefreshed(retryToken);
       } catch (e) {
-        storage.clearAuth();
+        expireSession();
         throw e;
       } finally {
         isRefreshing = false;
@@ -183,6 +192,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
     if (!retryResponse.ok) {
       const errorData = await retryResponse.json().catch(() => ({ message: 'Request failed' }));
+      if (retryResponse.status === 401) expireSession();
       throw new RequestError(retryResponse.status, errorData);
     }
     return retryResponse.status === 204 ? (undefined as T) : retryResponse.json();
@@ -190,6 +200,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+    if (response.status === 401) expireSession();
     throw new RequestError(response.status, errorData);
   }
 
@@ -210,11 +221,22 @@ export const authApi = {
 export const rideApi = {
   create: (data: RideRequest) =>
     api<{ data: CanonicalRide }>('/rides/request', { method: 'POST', body: JSON.stringify(data) }),
+  estimate: (data: { pickup: { latitude: number; longitude: number }; destination: { latitude: number; longitude: number } }) =>
+    api<{ data: RideEstimate }>('/rides/estimate', { method: 'POST', body: JSON.stringify(data) }),
   bookingDetails: (id: string) => api<{ data: BookingDetails }>(`/rides/${id}/booking-details`),
   cancel: (id: string, reason: string) =>
     api<{ data: CanonicalRide }>(`/rides/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   rate: (id: string, data: { stars: number; tip?: number }) =>
     api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export type RideEstimate = {
+  distanceMeters: number;
+  distanceKm: number;
+  durationSeconds: number;
+  durationMinutes: number;
+  polyline: string;
+  estimates: Array<{ vehicleType: 'BIKE' | 'AUTO' | 'CAB'; min: number; max: number }>;
 };
 
 export const fareApi = {

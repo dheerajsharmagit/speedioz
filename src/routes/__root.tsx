@@ -12,6 +12,22 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../lib/theme";
+import { storage } from "../lib/api";
+
+const RIDER_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+function accessTokenExpiresAt(token: string | null): number | null {
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = JSON.parse(atob(normalized)) as { exp?: number };
+    return typeof decoded.exp === "number" ? decoded.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
 
 function NotFoundComponent() {
   return (
@@ -106,6 +122,45 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!storage.getAccessToken()) return;
+    let timeoutId: number | undefined;
+    let expiryTimeoutId: number | undefined;
+    const signOutForInactivity = () => {
+      storage.clearAuth();
+      router.navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+    };
+    const renewSessionTimer = () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(signOutForInactivity, RIDER_IDLE_TIMEOUT_MS);
+    };
+    const activityEvents: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "touchstart", "scroll"];
+    activityEvents.forEach((event) => window.addEventListener(event, renewSessionTimer, { passive: true }));
+    window.addEventListener("focus", renewSessionTimer);
+    window.addEventListener("rh:session-expired", signOutForInactivity);
+
+    const expiresAt = accessTokenExpiresAt(storage.getAccessToken());
+    if (expiresAt !== null) {
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        signOutForInactivity();
+      } else {
+        expiryTimeoutId = window.setTimeout(signOutForInactivity, remaining);
+      }
+    }
+    renewSessionTimer();
+
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (expiryTimeoutId !== undefined) window.clearTimeout(expiryTimeoutId);
+      activityEvents.forEach((event) => window.removeEventListener(event, renewSessionTimer));
+      window.removeEventListener("focus", renewSessionTimer);
+      window.removeEventListener("rh:session-expired", signOutForInactivity);
+    };
+  }, [router]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
