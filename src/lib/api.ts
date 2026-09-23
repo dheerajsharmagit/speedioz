@@ -80,13 +80,15 @@ function addRefreshSubscriber(cb: (token: string) => void) {
 }
 
 export const storage = {
-  getAccessToken: () => localStorage.getItem(ACCESS_TOKEN_KEY),
-  getRefreshToken: () => localStorage.getItem(REFRESH_TOKEN_KEY),
+  getAccessToken: () => typeof window === 'undefined' ? null : localStorage.getItem(ACCESS_TOKEN_KEY),
+  getRefreshToken: () => typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_TOKEN_KEY),
   getUser: (): AuthUser | null => {
+    if (typeof window === 'undefined') return null;
     const u = localStorage.getItem(USER_KEY);
     return u ? JSON.parse(u) : null;
   },
   saveAuth: (res: AuthResponse) => {
+    if (typeof window === 'undefined') return;
     // The backend returns tokens either nested under `tokens` or flat on the root.
     const raw = res as unknown as {
       tokens?: { accessToken?: string; refreshToken?: string };
@@ -99,8 +101,11 @@ export const storage = {
     if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
   },
-  saveUser: (user: AuthUser) => localStorage.setItem(USER_KEY, JSON.stringify(user)),
+  saveUser: (user: AuthUser) => {
+    if (typeof window !== 'undefined') localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
   clearAuth: () => {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
