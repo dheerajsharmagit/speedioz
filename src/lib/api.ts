@@ -32,8 +32,21 @@ export type AuthUser = {
   totalRides?: number;
   totalRating?: number;
   emergencyContact?: { name: string; phone: string };
+  address?: string;
+  latitude?: number;
+  longitude?: number;
   isSuspended: boolean;
 };
+
+export type SavedPlace = {
+  id: string;
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type SavedPlaceInput = Omit<SavedPlace, 'id'>;
 
 export type AuthResponse = {
   user: AuthUser;
@@ -67,13 +80,15 @@ function addRefreshSubscriber(cb: (token: string) => void) {
 }
 
 export const storage = {
-  getAccessToken: () => localStorage.getItem(ACCESS_TOKEN_KEY),
-  getRefreshToken: () => localStorage.getItem(REFRESH_TOKEN_KEY),
+  getAccessToken: () => typeof window === 'undefined' ? null : localStorage.getItem(ACCESS_TOKEN_KEY),
+  getRefreshToken: () => typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_TOKEN_KEY),
   getUser: (): AuthUser | null => {
+    if (typeof window === 'undefined') return null;
     const u = localStorage.getItem(USER_KEY);
     return u ? JSON.parse(u) : null;
   },
   saveAuth: (res: AuthResponse) => {
+    if (typeof window === 'undefined') return;
     // The backend returns tokens either nested under `tokens` or flat on the root.
     const raw = res as unknown as {
       tokens?: { accessToken?: string; refreshToken?: string };
@@ -86,7 +101,11 @@ export const storage = {
     if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
   },
+  saveUser: (user: AuthUser) => {
+    if (typeof window !== 'undefined') localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
   clearAuth: () => {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -336,12 +355,18 @@ export type BookingDetails = {
 // User methods
 export const userApi = {
   getMe: () => api<{ user: AuthUser }>('/users/me'),
-  updateMe: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
-  getSavedPlaces: () => api<{ data: any[] }>('/users/me/saved-places'),
-  addSavedPlace: (data: any) => api<{ data: any }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+  updateMe: (data: Partial<Pick<AuthUser, 'name' | 'email' | 'phone' | 'avatarUrl' | 'address' | 'latitude' | 'longitude'>>) =>
+    api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  getSavedPlaces: () => api<{ data: SavedPlace[] }>('/users/me/saved-places'),
+  addSavedPlace: (data: SavedPlaceInput) =>
+    api<{ data: SavedPlace }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+  updateSavedPlace: (id: string, data: SavedPlaceInput) =>
+    api<{ data: SavedPlace }>(`/users/me/saved-places/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSavedPlace: (id: string) => api<void>(`/users/me/saved-places/${id}`, { method: 'DELETE' }),
   getRideHistory: () => api<{ data: any[] }>('/rides/history/me'),
   getProfile: () => api<{ user: AuthUser }>('/users/me'),
-  updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  updateProfile: (data: Partial<Pick<AuthUser, 'name' | 'email' | 'phone' | 'avatarUrl' | 'address' | 'latitude' | 'longitude'>>) =>
+    api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // Captain methods.
