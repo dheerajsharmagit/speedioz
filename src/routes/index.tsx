@@ -597,61 +597,20 @@ function Landing() {
 
       {/* FOOTER */}
       <footer id="contact" className="border-t border-border bg-background px-6 py-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-10 md:grid-cols-4">
-            <div>
-              <div className="text-xl font-black">
-                RIDE<span className="text-primary">HER</span>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Safe Rides. Her Way. Built by Women. For Women.
-              </p>
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-xl font-black">
+              RIDE<span className="text-primary">HER</span>
             </div>
-            <FooterCol
-              title="Company"
-              items={["About RIDEHER", "Careers", "Community Guidelines", "Contact"]}
-            />
-            <FooterCol
-              title="Safety & Support"
-              items={["Safety Center", "Emergency Support", "FAQs", "24×7 Support"]}
-            />
-            <FooterCol
-              title="Legal"
-              items={["Privacy Policy", "Terms & Conditions", "Become a Captain", "Social Media"]}
-            />
-          </div>
-          <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              © 2026 RIDEHER · Your Safe Travel Companion
+            <p className="mt-3 text-xs text-muted-foreground">
+              Safe Rides. Her Way. Built by Women. For Women.
             </p>
-            <div className="flex gap-4 text-xs text-muted-foreground">
-              <a href="#">Instagram</a>
-              <a href="#">LinkedIn</a>
-              <a href="#">YouTube</a>
-              <a href="#">X</a>
-            </div>
           </div>
+          <p className="border-t border-border pt-6 font-mono text-[10px] uppercase tracking-widest text-muted-foreground sm:border-t-0 sm:pt-0">
+            © 2026 RIDEHER · Your Safe Travel Companion
+          </p>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function FooterCol({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {title}
-      </p>
-      <ul className="mt-4 space-y-2 text-sm">
-        {items.map((i) => (
-          <li key={i}>
-            <a href="#" className="hover:text-primary">
-              {i}
-            </a>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
