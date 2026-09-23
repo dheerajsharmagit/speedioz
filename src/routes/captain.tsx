@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
-import { storage, captainApi, api } from "@/lib/api";
+import { storage, rideApi, api } from "@/lib/api";
 import { getDeviceId } from "@/lib/device-id";
 import type { Ride } from "@/lib/rides";
 
@@ -71,8 +71,8 @@ function CaptainPage() {
   async function accept(ride: Ride) {
     setError(null);
     try {
-      const response = await captainApi.accept(ride.id);
-      setActive((response?.data ?? response) as Ride);
+      const data = await rideApi.updateStatus(ride.id, "accepted");
+      setActive(data as Ride);
       setPending((p) => p.filter((r) => r.id !== ride.id));
     } catch (e: any) {
       setError(e.error?.message || "Accept failed");
