@@ -46,22 +46,27 @@ function AuthPage() {
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin + "/auth",
       });
-      
+
       if (result.error) throw result.error;
-      
+      if (result.redirected) return;
+
       const supabaseClient = await import("@/integrations/supabase/client");
       const { data: { session } } = await supabaseClient.supabase.auth.getSession();
-      if (session?.access_token) {
-        const authRes = await authApi.signupGoogle(session.access_token);
-        storage.saveAuth(authRes);
-        await router.invalidate();
-        navigate({ to: "/ride" });
+      if (!session?.access_token) {
+        throw new Error("Google sign-in did not complete. Please try again.");
       }
+
+      const authRes = await authApi.signupGoogle(session.access_token);
+      storage.saveAuth(authRes);
+      await router.invalidate();
+      navigate({ to: "/ride" });
     } catch (e: any) {
-      setError(e.message || "Google sign-in failed");
+      setError(e?.error?.message || e?.message || "Google sign-in failed");
+    } finally {
       setLoading(false);
     }
   };
+
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
