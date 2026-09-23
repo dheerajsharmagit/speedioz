@@ -32,8 +32,21 @@ export type AuthUser = {
   totalRides?: number;
   totalRating?: number;
   emergencyContact?: { name: string; phone: string };
+  address?: string;
+  latitude?: number;
+  longitude?: number;
   isSuspended: boolean;
 };
+
+export type SavedPlace = {
+  id: string;
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type SavedPlaceInput = Omit<SavedPlace, 'id'>;
 
 export type AuthResponse = {
   user: AuthUser;
@@ -86,6 +99,7 @@ export const storage = {
     if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
   },
+  saveUser: (user: AuthUser) => localStorage.setItem(USER_KEY, JSON.stringify(user)),
   clearAuth: () => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
@@ -336,12 +350,18 @@ export type BookingDetails = {
 // User methods
 export const userApi = {
   getMe: () => api<{ user: AuthUser }>('/users/me'),
-  updateMe: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
-  getSavedPlaces: () => api<{ data: any[] }>('/users/me/saved-places'),
-  addSavedPlace: (data: any) => api<{ data: any }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+  updateMe: (data: Partial<Pick<AuthUser, 'name' | 'email' | 'phone' | 'avatarUrl' | 'address' | 'latitude' | 'longitude'>>) =>
+    api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  getSavedPlaces: () => api<{ data: SavedPlace[] }>('/users/me/saved-places'),
+  addSavedPlace: (data: SavedPlaceInput) =>
+    api<{ data: SavedPlace }>('/users/me/saved-places', { method: 'POST', body: JSON.stringify(data) }),
+  updateSavedPlace: (id: string, data: SavedPlaceInput) =>
+    api<{ data: SavedPlace }>(`/users/me/saved-places/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSavedPlace: (id: string) => api<void>(`/users/me/saved-places/${id}`, { method: 'DELETE' }),
   getRideHistory: () => api<{ data: any[] }>('/rides/history/me'),
   getProfile: () => api<{ user: AuthUser }>('/users/me'),
-  updateProfile: (data: any) => api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  updateProfile: (data: Partial<Pick<AuthUser, 'name' | 'email' | 'phone' | 'avatarUrl' | 'address' | 'latitude' | 'longitude'>>) =>
+    api<{ user: AuthUser }>('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // Captain methods.
