@@ -547,7 +547,7 @@ function RidePage() {
         dropLat: dest.lat,
         dropLng: dest.lng,
         // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
-        vehicleType: selected === "ev" ? "BIKE" : selected.toUpperCase(),
+        vehicleType: (selected === "ev" ? "BIKE" : selected.toUpperCase()) as "BIKE" | "AUTO" | "CAB",
         paymentMethod: payment === "upi" ? "UPI" : payment === "cash" ? "CASH" : "CARD",
       });
       setRide(toClientRide(response.data));

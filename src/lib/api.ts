@@ -211,8 +211,32 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const authApi = {
   signup: (data: any) => api<AuthResponse>('/auth/signup/customer', { method: 'POST', body: JSON.stringify(data) }),
   login: (data: any) => api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ ...data, expectedRole: 'CUSTOMER' }) }),
-  signupGoogle: (credential: string) => api<AuthResponse>('/auth/signup/google', { method: 'POST', body: JSON.stringify({ credential }) }),
-  loginGoogle: (credential: string) => api<AuthResponse>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  // The backend accepts the Google/Supabase token under different key names
+  // depending on the endpoint, and its signup/login split is not consistent —
+  // try both routes and send every accepted alias.
+  google: async (credential: string) => {
+    const body = JSON.stringify({ credential, idToken: credential, accessToken: credential, provider: 'google' });
+    const paths = ['/auth/google', '/auth/signup/google', '/auth/login/google'];
+    let lastError: unknown;
+    for (const path of paths) {
+      try {
+        return await api<AuthResponse>(path, { method: 'POST', body });
+      } catch (e) {
+        lastError = e;
+        if (e instanceof RequestError && e.status !== 404 && e.status < 500) throw e;
+      }
+    }
+    throw lastError instanceof Error
+      ? new RequestError(503, {
+          code: 'GOOGLE_SIGNIN_UNAVAILABLE',
+          message: 'Google sign-in is temporarily unavailable. Please sign in with your email and password.',
+          requestId: 'internal',
+        })
+      : lastError;
+  },
+  signupGoogle: (credential: string) => authApi.google(credential),
+  loginGoogle: (credential: string) => authApi.google(credential),
+
   logout: () => api('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: storage.getRefreshToken() }) }).finally(() => storage.clearAuth()),
   me: () => api<{ user: AuthUser }>('/auth/me'),
 };
