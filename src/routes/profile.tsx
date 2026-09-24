@@ -28,6 +28,7 @@ function errorMessage(error: unknown, fallback: string) {
 function ProfilePage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signedOut, setSignedOut] = useState(false);
   const [rides, setRides] = useState<any[]>([]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -37,6 +38,11 @@ function ProfilePage() {
 
   useEffect(() => {
     setUser(storage.getUser());
+    if (!storage.getAccessToken()) {
+      setSignedOut(true);
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const [profileRes, historyRes] = await Promise.all([
@@ -47,7 +53,8 @@ function ProfilePage() {
         storage.saveUser(profileRes.user);
         setRides(historyRes.data ?? []);
       } catch (e) {
-        setError(errorMessage(e, "We couldn't load your profile."));
+        if ((e as { status?: number })?.status === 401 || !storage.getAccessToken()) setSignedOut(true);
+        else setError(errorMessage(e, "We couldn't load your profile."));
       } finally {
         setLoading(false);
       }
@@ -90,6 +97,20 @@ function ProfilePage() {
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading profile" /></div>;
+  }
+
+  if (signedOut) {
+    return (
+      <div className="min-h-screen bg-background pb-32">
+        <main className="mx-auto flex max-w-[430px] flex-col items-center px-6 pt-24 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary"><User className="h-9 w-9" /></div>
+          <h1 className="mt-5 text-xl font-extrabold">Sign in to view your profile</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Your session has ended or you haven't signed in yet.</p>
+          <Button asChild className="mt-6 w-full rounded-2xl"><Link to="/auth" search={{ mode: "signin" } as never}>Sign in</Link></Button>
+        </main>
+        <RoleNav />
+      </div>
+    );
   }
 
   const initials = (user?.name || "R").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
