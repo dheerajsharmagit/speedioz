@@ -9,6 +9,7 @@ import {
 } from "@/lib/google-maps-loader";
 
 import { useTheme } from "@/lib/theme";
+import { LeafletFallbackMap } from "@/components/rc/LeafletFallbackMap";
 
 
 
@@ -420,18 +421,28 @@ export function RideMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recenterKey]);
 
+  // While the Google Maps browser key is missing or not yet authorised for
+  // this domain, run OpenStreetMap in parallel so the map never stays blank.
   if (loadError) {
     return (
-      <div className={`${className ?? "relative h-full w-full"} grid place-items-center bg-muted p-5`}>
-        <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3 rounded-2xl bg-background p-4 text-center shadow-md">
-          <span className="text-xs font-semibold text-muted-foreground">Google Maps is unavailable. Check the API key and allowed domain.</span>
-          <button
-            onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); setRetryTick((n) => n + 1); }}
-            className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-secondary"
-          >
-            Retry
-          </button>
-        </div>
+      <div className={className ?? "relative h-full w-full"}>
+        <LeafletFallbackMap
+          pickup={pickup}
+          drop={drop}
+          captain={captain}
+          userLocation={userLocation}
+          polyline={polyline}
+          fitKey={fitKey}
+          routeLoading={routeLoading}
+          routeError={routeError}
+          className="absolute inset-0"
+        />
+        <button
+          onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); setRetryTick((n) => n + 1); }}
+          className="absolute bottom-3 left-3 z-[1000] rounded-full bg-background/95 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-md border border-border/50"
+        >
+          Using OpenStreetMap · retry Google Maps
+        </button>
       </div>
     );
   }
