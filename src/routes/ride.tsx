@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, captainAvailabilityApi, captainMapApi, rideApi, storage, type BookingDetails, type CanonicalRide } from "@/lib/api";
+import { API_BASE_URL, captainAvailabilityApi, captainMapApi, rideApi, storage, vehicleTypesApi, walletApi, type BookingDetails, type CanonicalRide, type VehicleTypeId } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
@@ -25,6 +25,7 @@ const vehicles: Vehicle[] = [
   { id: "bike", name: "Bike", price: 45, eta: "3 min" },
   { id: "auto", name: "Auto", price: 78, eta: "6 min" },
   { id: "ev", name: "EV Bike", price: 52, eta: "4 min", note: "Green" },
+  { id: "cab", name: "Cab", price: 120, eta: "8 min" },
 ];
 
 type Pickup = { label: string; lat: number; lng: number };
@@ -317,7 +318,7 @@ function RidePage() {
   }, []);
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
-  const fare = fareQuotes[selected as "bike" | "auto" | "ev"] ?? vehicle.price;
+  const fare = fareQuotes[selected as "bike" | "auto" | "ev" | "cab"] ?? vehicle.price;
   const smartSavings = 12;
 
   // Real-time ride updates via Socket.IO
@@ -490,10 +491,11 @@ function RidePage() {
       destination: { latitude: dest.lat, longitude: dest.lng },
     }).then((response) => {
       if (cancelled) return;
-      const quotes: Partial<Record<"bike" | "auto" | "ev", number>> = {};
+      const quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>> = {};
       response.data.estimates.forEach((estimate) => {
         if (estimate.vehicleType === "BIKE") { quotes.bike = estimate.max; quotes.ev = estimate.max; }
         if (estimate.vehicleType === "AUTO") quotes.auto = estimate.max;
+        if (estimate.vehicleType === "CAB") quotes.cab = estimate.max;
       });
       setFareQuotes(quotes);
       setRouteInfo({ distanceMeters: response.data.distanceMeters, durationSeconds: response.data.durationSeconds });
@@ -514,6 +516,34 @@ function RidePage() {
     const interval = window.setInterval(refreshAvailability, 30000);
     return () => window.clearInterval(interval);
   }, [selected]);
+
+  // Vehicle-type availability comes from the cities/zones admin module. Every
+  // supported type stays visible; unavailable ones render disabled.
+  useEffect(() => {
+    if (!storage.getAccessToken()) return;
+    let cancelled = false;
+    vehicleTypesApi.get()
+      .then((types) => { if (!cancelled) setVehicleAvailability(types); })
+      .catch(() => { if (!cancelled) setVehicleAvailability({}); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Wallet balance is checked before booking so a low balance shows a friendly
+  // top-up prompt instead of a raw server error after submission.
+  useEffect(() => {
+    if (step !== "confirm" || !storage.getAccessToken()) return;
+    let cancelled = false;
+    setWalletShortfall(null);
+    walletApi.get()
+      .then((wallet) => {
+        if (cancelled) return;
+        setWalletBalance(wallet.balance);
+        if (wallet.balance >= fare) setWalletShortfall(null);
+      })
+      .catch(() => { if (!cancelled) setWalletBalance(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, fare]);
 
   useEffect(() => {
     if (!storage.getAccessToken()) return;
@@ -537,6 +567,12 @@ function RidePage() {
       setStep("destination");
       return;
     }
+    // Wallet pre-check: never submit a booking the balance can't cover.
+    const quote = fareQuotes[selected as "bike" | "auto" | "ev" | "cab"];
+    if (quote != null && walletBalance != null && walletBalance < quote) {
+      setWalletShortfall({ balance: walletBalance, fare: quote });
+      return;
+    }
     setCreating(true);
     try {
       const response = await rideApi.create({
@@ -555,6 +591,13 @@ function RidePage() {
     } catch (e: any) {
       console.error(e);
       const code = e?.error?.code;
+      // The server can still reject the booking for a low wallet — show the
+      // same friendly top-up prompt instead of the raw error string.
+      const errText = `${code ?? ""} ${e?.error?.message ?? ""}`.toLowerCase();
+      if ((errText.includes("wallet") && errText.includes("balance")) || errText.includes("insufficient")) {
+        setWalletShortfall({ balance: walletBalance ?? 0, fare });
+        return;
+      }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
@@ -562,6 +605,21 @@ function RidePage() {
       alert(msg);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleTopup(amount: number) {
+    setTopupBusy(true);
+    try {
+      const result = await walletApi.topup(amount);
+      if (typeof result.balance === "number") setWalletBalance(result.balance);
+      setWalletShortfall(null);
+      setTopupOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert("Couldn't add money to your wallet right now. Please try again.");
+    } finally {
+      setTopupBusy(false);
     }
   }
 
@@ -1047,6 +1105,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               useSmartRoute={useSmartRoute}
               setUseSmartRoute={setUseSmartRoute}
               quotes={fareQuotes}
+              availability={vehicleAvailability}
               onNext={() => setStep("confirm")}
             />
           )}
@@ -1061,6 +1120,8 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               setPayment={setPayment}
               onNext={createRide}
               busy={creating}
+              walletShortfall={walletShortfall}
+              onAddMoney={() => setTopupOpen(true)}
               routeInfo={routeInfo}
               pickupLabel={pickup.label}
               dropLabel={dest?.addr ?? ""}
@@ -1127,6 +1188,15 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
           )}
         </section>
       </div>
+
+      {topupOpen && (
+        <WalletTopup
+          balance={walletBalance}
+          busy={topupBusy}
+          onClose={() => setTopupOpen(false)}
+          onTopup={handleTopup}
+        />
+      )}
     </div>
   );
 }
@@ -1283,13 +1353,14 @@ function DestinationStep({
 
 /* ---------- Vehicle ---------- */
 function VehicleStep({
-  selected, setSelected, useSmartRoute, setUseSmartRoute, quotes, onNext,
+  selected, setSelected, useSmartRoute, setUseSmartRoute, quotes, availability, onNext,
 }: {
   selected: string;
   setSelected: (v: string) => void;
   useSmartRoute: boolean;
   setUseSmartRoute: (v: boolean) => void;
-  quotes: Partial<Record<"bike" | "auto" | "ev", number>>;
+  quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>>;
+  availability: Partial<Record<VehicleTypeId, boolean>>;
   onNext: () => void;
 }) {
   return (
@@ -1302,12 +1373,19 @@ function VehicleStep({
       <div className="mb-6 flex gap-3 overflow-x-auto px-6 scrollbar-hide">
         {vehicles.map((v) => {
           const active = v.id === selected;
+          // EV bikes book as BIKE on the backend, so availability follows BIKE.
+          const availabilityKey: VehicleTypeId = v.id === "auto" ? "AUTO" : v.id === "cab" ? "CAB" : "BIKE";
+          const unavailable = availability[availabilityKey] === false;
           return (
             <button
               key={v.id}
-              onClick={() => setSelected(v.id)}
+              onClick={() => { if (!unavailable) setSelected(v.id); }}
+              disabled={unavailable}
+              aria-disabled={unavailable}
               className={`w-32 flex-none rounded-2xl p-4 text-left ring-1 transition ${
-                active ? "bg-primary ring-black/5" : "bg-card ring-border hover:ring-foreground/20"
+                unavailable
+                  ? "cursor-not-allowed bg-muted opacity-50 ring-border"
+                  : active ? "bg-primary ring-black/5" : "bg-card ring-border hover:ring-foreground/20"
               }`}
             >
               <p className="font-mono text-[10px] font-bold uppercase">
@@ -1315,10 +1393,14 @@ function VehicleStep({
                 {v.note ? <span className="ml-1 text-accent">·{v.note}</span> : null}
               </p>
               <p className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}>
-                {quotes[v.id as "bike" | "auto" | "ev"] ? `₹${quotes[v.id as "bike" | "auto" | "ev"]}` : "Get quote"}
+                {unavailable
+                  ? "—"
+                  : quotes[v.id as "bike" | "auto" | "ev" | "cab"]
+                    ? `₹${quotes[v.id as "bike" | "auto" | "ev" | "cab"]}`
+                    : "Get quote"}
               </p>
               <p className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}>
-                {v.eta.toUpperCase()} ETA
+                {unavailable ? "Not available" : `${v.eta.toUpperCase()} ETA`}
               </p>
             </button>
           );
@@ -1369,7 +1451,7 @@ function VehicleStep({
 
 /* ---------- Confirm ---------- */
 function ConfirmStep({
-  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel,
+  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel, walletShortfall, onAddMoney,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -1379,6 +1461,8 @@ function ConfirmStep({
   setPayment: (p: Payment) => void;
   onNext: () => void;
   busy: boolean;
+  walletShortfall: { balance: number; fare: number } | null;
+  onAddMoney: () => void;
   routeInfo: { distanceMeters: number; durationSeconds: number } | null;
   pickupLabel: string;
   dropLabel: string;
@@ -1442,6 +1526,23 @@ function ConfirmStep({
           </div>
         </div>
       </div>
+
+      {walletShortfall && (
+        <div className="mb-4 px-6">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
+            <p className="text-sm font-semibold">
+              Your wallet balance (₹{walletShortfall.balance}) is not enough for this ride (estimated
+              ₹{walletShortfall.fare}). Please add money to your wallet.
+            </p>
+            <button
+              onClick={onAddMoney}
+              className="mt-3 h-11 w-full rounded-full bg-primary text-sm font-bold text-secondary"
+            >
+              Add money
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 px-6">
         <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payment</p>
@@ -1756,5 +1857,73 @@ function RatingStep({
         </button>
       </div>
     </>
+  );
+}
+
+/* ---------- Wallet top-up ---------- */
+function WalletTopup({ balance, busy, onClose, onTopup }: {
+  balance: number | null;
+  busy: boolean;
+  onClose: () => void;
+  onTopup: (amount: number) => void;
+}) {
+  const [amount, setAmount] = useState("200");
+  const presets = [100, 200, 500];
+  const parsed = Number(amount);
+  const valid = Number.isFinite(parsed) && parsed >= 10 && parsed <= 10000;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add money to wallet"
+    >
+      <div
+        className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-extrabold tracking-tight">Add money</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-9 w-9 place-items-center rounded-full border border-border text-sm"
+          >
+            ✕
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {balance != null ? `Current balance: ₹${balance}` : "Loading your balance…"}
+        </p>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {presets.map((p) => (
+            <button
+              key={p}
+              onClick={() => setAmount(String(p))}
+              className={`h-12 rounded-2xl border text-sm font-bold transition ${
+                Number(amount) === p ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background"
+              }`}
+            >
+              ₹{p}
+            </button>
+          ))}
+        </div>
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          placeholder="Custom amount (₹10 – ₹10,000)"
+          className="mt-3 h-12 w-full rounded-2xl border border-border bg-background px-4 text-sm font-bold outline-none focus:border-foreground/40"
+        />
+        <button
+          disabled={!valid || busy}
+          onClick={() => onTopup(parsed)}
+          className="mt-4 h-14 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-50"
+        >
+          {busy ? "Adding…" : `Add ₹${valid ? parsed : 0}`}
+        </button>
+      </div>
+    </div>
   );
 }
