@@ -412,3 +412,47 @@ export const captainApi = {
       body: JSON.stringify({ isAvailable, status: isAvailable ? 'AVAILABLE' : 'OFFLINE' }),
     }),
 };
+
+// Wallet + vehicle-type availability used by the customer booking flow.
+export type VehicleTypeId = "BIKE" | "AUTO" | "CAB";
+
+function parseWalletBalance(res: any): number {
+  const d = res?.data ?? res ?? {};
+  const raw = d.balance ?? d.amount ?? d.walletBalance ?? d.newBalance ?? d.credits;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export const walletApi = {
+  get: async () => ({ balance: parseWalletBalance(await api<any>("/users/me/wallet")) }),
+  topup: async (amount: number) => {
+    const res = await api<any>("/users/me/wallet/topup", { method: "POST", body: JSON.stringify({ amount }) });
+    return { balance: parseWalletBalance(res) };
+  },
+};
+
+// Availability per vehicle type (enabled per city/zone in the admin module).
+// Unknown or missing types are treated as available.
+function parseVehicleTypes(res: any): Partial<Record<VehicleTypeId, boolean>> {
+  const d = res?.data ?? res;
+  const out: Partial<Record<VehicleTypeId, boolean>> = {};
+  const norm = (v: unknown) => String(v ?? "").toUpperCase();
+  const readFlag = (item: any) =>
+    item?.available ?? item?.isEnabled ?? item?.enabled ?? item?.isAvailable ?? true;
+  if (Array.isArray(d)) {
+    for (const item of d) {
+      const type = norm(item?.vehicleType ?? item?.type ?? item?.name);
+      if (type === "BIKE" || type === "AUTO" || type === "CAB") out[type] = Boolean(readFlag(item));
+    }
+  } else if (d && typeof d === "object") {
+    for (const key of Object.keys(d)) {
+      const type = norm(key);
+      if (type === "BIKE" || type === "AUTO" || type === "CAB") out[type as VehicleTypeId] = Boolean(d[key]);
+    }
+  }
+  return out;
+}
+
+export const vehicleTypesApi = {
+  get: async () => parseVehicleTypes(await api<any>("/rides/vehicle-types")),
+};
