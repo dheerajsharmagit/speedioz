@@ -237,7 +237,12 @@ function RidePage() {
   const firstFixRef = useRef(false);
 
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
-  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev", number>>>({});
+  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev" | "cab", number>>>({});
+  const [vehicleAvailability, setVehicleAvailability] = useState<Partial<Record<"BIKE" | "AUTO" | "CAB", boolean>>>({});
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletShortfall, setWalletShortfall] = useState<{ balance: number; fare: number } | null>(null);
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [topupBusy, setTopupBusy] = useState(false);
   const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
   const [nearbyCaptains, setNearbyCaptains] = useState<{ lat: number; lng: number }[]>([]);
 
