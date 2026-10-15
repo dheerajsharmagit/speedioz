@@ -1317,6 +1317,7 @@ function StepIndicator({ step }: { step: UiStep }) {
     destination: "01 · Where to",
     vehicle: "02 · Vehicle",
     confirm: "03 · Confirm",
+    payment: "03 · Payment",
     searching: "04 · Matching",
     matched: "05 · Matched",
     arriving: "06 · Pickup",
