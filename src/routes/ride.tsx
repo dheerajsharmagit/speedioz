@@ -1886,8 +1886,12 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
       <div className="mb-6 px-6">
         <div className="rounded-2xl border border-border p-5">
           <div className="flex items-baseline justify-between">
-            <p className="text-sm font-bold">Total to pay</p>
+            <p className="text-sm font-bold">Total fare</p>
             <p className="text-3xl font-extrabold">₹{fare}</p>
+          </div>
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+            <div className="flex justify-between"><span>Ride fare</span><span>₹{Math.round(fare * 0.95)}</span></div>
+            <div className="flex justify-between"><span>Taxes & fees</span><span>₹{fare - Math.round(fare * 0.95)}</span></div>
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -1903,7 +1907,7 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
           onClick={onNext}
           className="h-14 w-full rounded-full bg-primary text-base font-bold text-secondary shadow-xl transition-transform active:scale-95"
         >
-          Pay & rate
+          Rate your ride
         </button>
       </div>
     </>
@@ -1973,6 +1977,18 @@ function RatingStep({
             );
           })}
         </div>
+      </div>
+
+      <div className="mb-6 px-6">
+        <label className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground" htmlFor="rate-comment">Comment (optional)</label>
+        <textarea
+          id="rate-comment"
+          value={comment}
+          maxLength={500}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="How was your ride?"
+          className="min-h-20 w-full rounded-2xl border border-border bg-background p-3 text-sm"
+        />
       </div>
 
       <div className="px-6 pb-12">
@@ -2053,5 +2069,107 @@ function WalletTopup({ balance, busy, onClose, onTopup }: {
         </button>
       </div>
     </div>
+  );
+}
+
+/* ---------- Online payment (UPI / Card) ---------- */
+function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, onCancel }: {
+  rideId: string;
+  method: Payment;
+  fare: number;
+  intent: PaymentIntent;
+  onPaid: () => void;
+  onRetry: () => void;
+  onSwitch: () => void;
+  onCancel: () => void;
+}) {
+  const expiresAt = intent.metadata?.expiresAt;
+  const [left, setLeft] = useState(() => secondsUntil(expiresAt));
+  const [status, setStatus] = useState<PaymentStatus>("PENDING");
+  const [busy, setBusy] = useState(false);
+  const expired = left <= 0 || status === "EXPIRED";
+
+  useEffect(() => {
+    const id = window.setInterval(() => setLeft(secondsUntil(expiresAt)), 1000);
+    return () => window.clearInterval(id);
+  }, [expiresAt]);
+
+  // Poll every 3s until paid; webhooks can be delayed, so keep checking.
+  useEffect(() => {
+    if (expired || status === "PAID") return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const s = await paymentApi.forRide(rideId);
+        if (cancelled) return;
+        setStatus(s);
+        if (s === "PAID") onPaid();
+      } catch (e) {
+        console.warn("Payment status check failed", e);
+      }
+    };
+    void check();
+    const id = window.setInterval(check, 3000);
+    return () => { cancelled = true; window.clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rideId, expired, status]);
+
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  const qr = intent.metadata?.qrCode;
+  const upi = intent.metadata?.upiIntent;
+  const checkout = intent.metadata?.checkoutUrl;
+
+  return (
+    <>
+      <div className="mb-4 px-6 text-center">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{method === "card" ? "Card payment" : "UPI payment"}</p>
+        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{fare} to book</h2>
+        <p className="mt-1 text-xs text-muted-foreground">We'll find your captain as soon as payment is confirmed.</p>
+      </div>
+
+      {status === "FAILED" && !expired && (
+        <div className="mx-6 mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold">
+          Payment failed. Try again or pick another method.
+        </div>
+      )}
+
+      {expired ? (
+        <div className="mx-6 mb-6 rounded-2xl border border-border bg-muted p-5 text-center">
+          <p className="text-base font-bold">Payment time ran out</p>
+          <p className="mt-1 text-xs text-muted-foreground">No money was taken. Try again or choose another way to pay.</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={async () => { setBusy(true); try { await onRetry(); } finally { setBusy(false); } }} className="h-12 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60">
+              {busy ? "Retrying…" : "Retry"}
+            </button>
+            <button onClick={onSwitch} className="h-12 rounded-full border border-border bg-background text-sm font-bold">Switch method</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
+          {qr ? (
+            <img src={qr} alt="Scan to pay with any UPI app" className="mx-auto h-52 w-52 rounded-xl bg-background p-2" />
+          ) : (
+            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">QR loading…</div>
+          )}
+          <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">Expires in {mm}:{ss}</p>
+          <div className="mt-4 grid gap-2">
+            {upi && (
+              <a href={upi} className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Pay with UPI app</a>
+            )}
+            {checkout && method === "card" && (
+              <a href={checkout} target="_blank" rel="noreferrer" className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Open card checkout</a>
+            )}
+          </div>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for payment confirmation…
+          </div>
+        </div>
+      )}
+
+      <div className="px-6 pb-12">
+        <button onClick={onCancel} className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold">Cancel booking</button>
+      </div>
+    </>
   );
 }
