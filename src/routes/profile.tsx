@@ -160,7 +160,7 @@ function ProfilePage() {
         </section>
 
         <section className="mt-6">
-          <div className="mb-3 flex items-center justify-between px-1"><h2 className="text-sm font-bold">Recent trips</h2><Link to="/ride" className="text-xs font-semibold text-primary">Book a ride</Link></div>
+          <div className="mb-3 flex items-center justify-between px-1"><h2 className="text-sm font-bold">Recent trips</h2><Link to="/history" className="text-xs font-semibold text-primary">View all</Link></div>
           {rides.length > 0 ? (
             <div className="space-y-3">
               {rides.slice(0, 3).map((ride, i) => (
