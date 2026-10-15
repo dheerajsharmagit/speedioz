@@ -400,6 +400,7 @@ export type BookingDetails = {
     rating: number | null;
   } | null;
   captainLocation: { lat: number; lng: number } | null;
+  customer?: { name?: string; phone?: string | null } | null;
   otp?: string;
 };
 

@@ -259,6 +259,7 @@ function CaptainPage() {
               {active.status === "ARRIVING" ? "At pickup — ask for OTP" : "Navigate to pickup"}
             </p>
             <h2 className="mt-2 text-xl font-extrabold">{active.pickup.address}</h2>
+            {active.customer?.name && <p className="mt-1 text-sm font-semibold">Rider: {active.customer.name}{active.customer.phone ? ` · ${active.customer.phone}` : ""}</p>}
             <p className="mt-1 text-xs opacity-70">Drop: {active.drop.address} · ₹{active.fareEstimate}</p>
             <div className="mt-4 grid grid-cols-3 gap-2">
               <a
@@ -267,10 +268,10 @@ function CaptainPage() {
                 className="flex h-12 items-center justify-center gap-1 rounded-full bg-primary text-xs font-bold text-primary-foreground"
               ><Navigation className="h-4 w-4" /> Navigate</a>
               <a
-                href={undefined}
-                className="flex h-12 items-center justify-center gap-1 rounded-full border border-secondary-foreground/30 text-xs font-bold opacity-60"
-                aria-disabled
-              ><Phone className="h-4 w-4" /> Rider</a>
+                href={active.customer?.phone ? `tel:${active.customer.phone}` : undefined}
+                aria-disabled={!active.customer?.phone}
+                className={`flex h-12 items-center justify-center gap-1 rounded-full border border-secondary-foreground/30 text-xs font-bold ${active.customer?.phone ? "" : "pointer-events-none opacity-60"}`}
+              ><Phone className="h-4 w-4" /> Call rider</a>
               <button
                 onClick={arrived}
                 disabled={busyId === active.rideId || active.status === "ARRIVING"}
