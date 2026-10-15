@@ -14,6 +14,7 @@ import { Route as RoutesRouteImport } from './routes/routes'
 import { Route as RideRouteImport } from './routes/ride'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as CaptainRouteImport } from './routes/captain'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiDocsRouteImport } from './routes/api-docs'
@@ -44,6 +45,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CaptainRoute = CaptainRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
+  '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
+  '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
   '/captain': typeof CaptainRoute
+  '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/ride': typeof RideRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/api-docs'
     | '/auth'
     | '/captain'
+    | '/history'
     | '/onboarding'
     | '/profile'
     | '/ride'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/api-docs'
     | '/auth'
     | '/captain'
+    | '/history'
     | '/onboarding'
     | '/profile'
     | '/ride'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/api-docs'
     | '/auth'
     | '/captain'
+    | '/history'
     | '/onboarding'
     | '/profile'
     | '/ride'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   ApiDocsRoute: typeof ApiDocsRoute
   AuthRoute: typeof AuthRoute
   CaptainRoute: typeof CaptainRoute
+  HistoryRoute: typeof HistoryRoute
   OnboardingRoute: typeof OnboardingRoute
   ProfileRoute: typeof ProfileRoute
   RideRoute: typeof RideRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/captain': {
@@ -261,6 +281,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDocsRoute: ApiDocsRoute,
   AuthRoute: AuthRoute,
   CaptainRoute: CaptainRoute,
+  HistoryRoute: HistoryRoute,
   OnboardingRoute: OnboardingRoute,
   ProfileRoute: ProfileRoute,
   RideRoute: RideRoute,
