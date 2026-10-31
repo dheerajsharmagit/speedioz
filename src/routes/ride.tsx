@@ -897,10 +897,57 @@ function RidePage() {
     }
   }
 
-  async function handleTopup(_amount: number) {
-    alert(
-      "Wallet top-up is unavailable until secure payment checkout is connected. Please choose another payment method.",
-    );
+  const createRazorpayOrderFn = useServerFn(createRazorpayPayment);
+  const confirmRazorpayPaymentFn = useServerFn(confirmRazorpayPayment);
+
+  // Wallet top-up: pay through Razorpay test checkout, then credit the wallet
+  // on the RIDEHER backend once the payment verifies.
+  async function handleTopup(amount: number) {
+    setTopupBusy(true);
+    try {
+      const order = await createRazorpayOrderFn({
+        data: { amount, description: "RIDEHER wallet top-up" },
+      });
+      if (!order.ok) {
+        alert("Payment checkout isn't available right now. Please try again shortly.");
+        return;
+      }
+      let paid;
+      try {
+        paid = await openRazorpayCheckout({
+          keyId: order.keyId,
+          orderId: order.orderId,
+          amount: order.amount,
+          name: "RIDEHER",
+          description: "Wallet top-up",
+        });
+      } catch (e) {
+        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
+        throw e;
+      }
+      const check = await confirmRazorpayPaymentFn({
+        data: {
+          orderId: paid.razorpay_order_id,
+          paymentId: paid.razorpay_payment_id,
+          signature: paid.razorpay_signature,
+          expectedAmount: order.amount,
+        },
+      });
+      if (!check.ok) {
+        alert(
+          "We couldn't verify the payment. If money was debited, it will be refunded automatically.",
+        );
+        return;
+      }
+      const { balance } = await walletApi.topup(amount);
+      setWalletBalance(balance);
+      setTopupOpen(false);
+    } catch (e) {
+      console.error("Wallet top-up failed", e);
+      alert("Couldn't complete the top-up. Please try again.");
+    } finally {
+      setTopupBusy(false);
+    }
   }
 
   function onPaid() {
