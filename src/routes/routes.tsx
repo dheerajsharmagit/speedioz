@@ -60,7 +60,7 @@ function RoutesPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background pb-24 text-foreground">
+    <div className="min-h-screen bg-background pb-4 text-foreground">
       <div className="mx-auto max-w-6xl px-6 pt-8">
         <header className="pb-10">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
