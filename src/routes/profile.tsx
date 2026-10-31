@@ -156,7 +156,7 @@ function ProfilePage() {
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-background pb-4">
+    <div className="min-h-screen flex flex-col bg-background pb-4">
       <main className="mx-auto max-w-[430px] px-5 pt-6">
         <h1 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
           My profile

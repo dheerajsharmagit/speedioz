@@ -323,7 +323,7 @@ function CaptainPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-4 text-foreground">
+    <div className="min-h-screen flex flex-col bg-background pb-4 text-foreground">
       <div className="mx-auto max-w-3xl px-5 pt-8">
         <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           Captain portal

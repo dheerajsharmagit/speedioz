@@ -38,7 +38,7 @@ function SettingsPage() {
   const customerStatus = user ? (user.isSuspended ? "SUSPENDED" : "ACTIVE") : "UNKNOWN";
 
   return (
-    <div className="min-h-screen bg-background pb-4">
+    <div className="min-h-screen flex flex-col bg-background pb-4">
       <div className="mx-auto max-w-2xl px-6 pt-10">
         <Link
           to="/"
