@@ -233,10 +233,19 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     retryHeaders.set("Content-Type", "application/json");
     retryHeaders.set("Authorization", `Bearer ${retryToken}`);
 
-    const retryResponse = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: retryHeaders,
-    });
+    let retryResponse: Response;
+    try {
+      retryResponse = await fetchWithRetry(`${API_URL}${path}`, {
+        ...init,
+        headers: retryHeaders,
+      });
+    } catch {
+      throw new RequestError(503, {
+        code: "FETCH_ERROR",
+        message: "Unable to connect to RIDEHER server. Please check your internet connection.",
+        requestId: "internal",
+      });
+    }
 
     if (!retryResponse.ok) {
       const errorData = await retryResponse.json().catch(() => ({ message: "Request failed" }));
