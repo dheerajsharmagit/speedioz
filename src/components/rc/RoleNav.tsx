@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { storage, authApi } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Home,
   Bike,
@@ -61,9 +61,10 @@ export function RoleNav() {
   return (
     <>
       {/* spacer so page content never hides behind the bar */}
-      <div aria-hidden className="h-24" />
+      <div aria-hidden className="shrink-0" style={{ height: "var(--rc-nav-h, 104px)" }} />
 
       <nav
+        ref={navRef}
         aria-label="Main menu"
         className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
       >
