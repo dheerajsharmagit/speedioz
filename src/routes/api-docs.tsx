@@ -67,7 +67,7 @@ function ApiDocsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen flex flex-col bg-background pb-4">
       <div className="mx-auto max-w-6xl px-6 pt-10">
         <div className="flex items-baseline justify-between gap-4">
           <div>

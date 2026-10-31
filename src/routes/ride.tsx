@@ -1115,7 +1115,7 @@ function RidePage() {
 
   if (recovering || bookingError)
     return (
-      <div className="min-h-screen bg-background p-8 text-center">
+      <div className="flex min-h-screen flex-col bg-background p-8 text-center">
         <p role="status">{bookingError ?? "Checking for an existing ride…"}</p>
         {bookingError && (
           <button className="mt-4 underline" onClick={() => window.location.reload()}>
@@ -1740,7 +1740,7 @@ function DestinationStep({
         </div>
       )}
 
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           disabled={!dest || !pickupConfirmed}
           onClick={onNext}
@@ -1832,7 +1832,7 @@ function VehicleStep({
         route.
       </div>
 
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           onClick={onNext}
           disabled={quotes[selected as keyof typeof quotes] == null}
@@ -2000,7 +2000,7 @@ function ConfirmStep({
         </div>
       </div>
 
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           onClick={onNext}
           disabled={busy}
@@ -2065,7 +2065,7 @@ function SearchingStep({
           </p>
         </div>
       </div>
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           onClick={onCancel}
           className="h-14 w-full rounded-full border border-border bg-background text-sm font-bold transition-transform active:scale-95"
@@ -2389,7 +2389,7 @@ function RatingStep({
         />
       </div>
 
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           onClick={onDone}
           disabled={rating === 0}
@@ -2683,7 +2683,7 @@ function PaymentStep({
         </div>
       )}
 
-      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
+      <div className="px-6 pb-6">
         <button
           onClick={onCancel}
           className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold"

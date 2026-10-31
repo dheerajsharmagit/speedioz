@@ -11,7 +11,7 @@ export const Route = createFileRoute("/admin")({
 });
 function AdminPage() {
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="mx-auto flex max-w-4xl flex-col p-8">
       <h1 className="text-3xl font-bold">Operations</h1>
       <section className="mt-6 rounded-2xl border p-6">
         <h2 className="text-lg font-semibold">Live operations unavailable</h2>

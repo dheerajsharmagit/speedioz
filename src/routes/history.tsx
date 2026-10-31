@@ -42,7 +42,7 @@ function HistoryPage() {
   useEffect(() => { void load(); }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       <div className="mx-auto max-w-2xl px-5 pt-8">
         <h1 className="text-3xl font-extrabold tracking-tight">Your trips</h1>
         <p className="mt-1 text-sm text-muted-foreground">Fares and payment status for every ride.</p>
