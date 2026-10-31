@@ -20,6 +20,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RideRouteImport } from './routes/ride'
 import { Route as RoutesRouteImport } from './routes/routes'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ApiPublicRzCheckRouteImport } from './routes/api/public/rz-check'
 import { Route as ApiPublicRhSplatRouteImport } from './routes/api/public/rh/$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -77,6 +78,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicRzCheckRoute = ApiPublicRzCheckRouteImport.update({
+  id: '/api/public/rz-check',
+  path: '/api/public/rz-check',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicRhSplatRoute = ApiPublicRhSplatRouteImport.update({
   id: '/api/public/rh/$',
   path: '/api/public/rh/$',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rz-check': typeof ApiPublicRzCheckRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesByTo {
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rz-check': typeof ApiPublicRzCheckRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesById {
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
   '/settings': typeof SettingsRoute
+  '/api/public/rz-check': typeof ApiPublicRzCheckRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRouteTypes {
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rz-check'
     | '/api/public/rh/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rz-check'
     | '/api/public/rh/$'
   id:
     | '__root__'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/ride'
     | '/routes'
     | '/settings'
+    | '/api/public/rz-check'
     | '/api/public/rh/$'
   fileRoutesById: FileRoutesById
 }
@@ -183,6 +195,7 @@ export interface RootRouteChildren {
   RideRoute: typeof RideRoute
   RoutesRoute: typeof RoutesRoute
   SettingsRoute: typeof SettingsRoute
+  ApiPublicRzCheckRoute: typeof ApiPublicRzCheckRoute
   ApiPublicRhSplatRoute: typeof ApiPublicRhSplatRoute
 }
 
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/rz-check': {
+      id: '/api/public/rz-check'
+      path: '/api/public/rz-check'
+      fullPath: '/api/public/rz-check'
+      preLoaderRoute: typeof ApiPublicRzCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/rh/$': {
       id: '/api/public/rh/$'
       path: '/api/public/rh/$'
@@ -287,6 +307,7 @@ const rootRouteChildren: RootRouteChildren = {
   RideRoute: RideRoute,
   RoutesRoute: RoutesRoute,
   SettingsRoute: SettingsRoute,
+  ApiPublicRzCheckRoute: ApiPublicRzCheckRoute,
   ApiPublicRhSplatRoute: ApiPublicRhSplatRoute,
 }
 export const routeTree = rootRouteImport
