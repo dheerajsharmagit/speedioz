@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadCustomerActiveRide, cancelRideConfirmed } from "@/lib/booking";
+import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
+import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide } from "@/lib/booking";
 import { RequireRole } from "@/components/rc/RequireRole";
 import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
@@ -939,6 +940,21 @@ function RidePage() {
     setStep("destination");
   }
 
+  async function cancelBeforeStart() {
+    if (!ride || cancellationRef.current) throw new Error("Cancellation is already in progress.");
+    cancellationRef.current = true;
+    try {
+      await cancelAcceptedRide(ride.id);
+      clearPendingRide();
+      setRedispatching(false);
+      setApproachPolyline("");
+      setCaptainPos(null);
+      setStep("cancelled");
+    } finally {
+      cancellationRef.current = false;
+    }
+  }
+
   async function cancelSearch() {
     if (!(await confirmCancellation("Cancelled by customer"))) return;
     clearPendingRide();
@@ -1452,6 +1468,10 @@ function RidePage() {
               onNext={() => {}}
               ctaLabel="Live tracking"
             />
+          )}
+
+          {(step === "matched" || step === "arriving") && ride && (
+            <CancelAcceptedRide onConfirm={cancelBeforeStart} />
           )}
 
           {step === "inprogress" && ride && (

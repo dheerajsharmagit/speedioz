@@ -236,10 +236,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const authApi = {
   signup: (data: any) =>
     api<AuthResponse>("/auth/signup/customer", { method: "POST", body: JSON.stringify(data) }),
-  login: (data: { email: string; password: string; expectedRole?: AuthUser["role"] }) =>
+  login: (data: { email: string; password: string; expectedRole?: "CUSTOMER" }) =>
     api<AuthResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ ...data, expectedRole: data.expectedRole ?? "CUSTOMER" }),
+      body: JSON.stringify({ ...data, expectedRole: "CUSTOMER" }),
     }),
   // The backend accepts the Google/Supabase token under different key names
   // depending on the endpoint, and its signup/login split is not consistent —

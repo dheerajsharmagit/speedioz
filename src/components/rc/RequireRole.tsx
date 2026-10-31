@@ -41,8 +41,8 @@ export function RequireRole({ role, children }: { role: AuthUser["role"]; childr
           Try again
         </button>
       )}
-      {status === "denied" && (
-        <Link className="m-4 inline-block underline" to="/auth" search={{ mode: "signin", role }}>
+      {status === "denied" && role === "CUSTOMER" && (
+        <Link className="m-4 inline-block underline" to="/auth" search={{ mode: "signin" }}>
           Sign in with another account
         </Link>
       )}

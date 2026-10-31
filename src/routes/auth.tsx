@@ -1,15 +1,12 @@
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { authApi, storage, type AuthUser } from "@/lib/api";
+import { authApi, storage } from "@/lib/api";
 import { lovable } from "@/integrations/lovable";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { mode: "signin" | "signup"; role?: AuthUser["role"] } => {
+  validateSearch: (search: Record<string, unknown>): { mode: "signin" | "signup" } => {
     return {
       mode: search.mode === "signup" ? "signup" : "signin",
-      role: search.role === "CAPTAIN" || search.role === "ADMIN" ? search.role : "CUSTOMER",
     };
   },
   head: () => ({
@@ -24,17 +21,8 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const router = useRouter();
-  const { mode: initialMode, role: initialRole = "CUSTOMER" } = Route.useSearch();
-  const [role, setRole] = useState<AuthUser["role"]>(initialRole);
-  const destination = (user: AuthUser) =>
-    user.role === "ADMIN"
-      ? ("/admin" as const)
-      : user.role === "CAPTAIN"
-        ? ("/captain" as const)
-        : ("/ride" as const);
-  const [mode, setMode] = useState<"signin" | "signup">(
-    initialRole === "CUSTOMER" ? initialMode : "signin",
-  );
+  const { mode: initialMode } = Route.useSearch();
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
 
@@ -45,10 +33,10 @@ function AuthPage() {
 
   useEffect(() => {
     const user = storage.getUser();
-    if (user && storage.getAccessToken() && user.role === role && !user.isSuspended) {
-      navigate({ to: destination(user) });
+    if (user && storage.getAccessToken() && user.role === "CUSTOMER" && !user.isSuspended) {
+      navigate({ to: "/ride" });
     }
-  }, [navigate, role]);
+  }, [navigate]);
 
   const handleGoogle = async () => {
     setError(null);
@@ -70,11 +58,11 @@ function AuthPage() {
       }
 
       const authRes = await authApi.signupGoogle(session.access_token);
-      if (authRes.user.role !== role || authRes.user.isSuspended)
-        throw new Error("This account cannot access the selected portal.");
+      if (authRes.user.role !== "CUSTOMER" || authRes.user.isSuspended)
+        throw new Error("Please sign in with an active customer account.");
       storage.saveAuth(authRes);
       await router.invalidate();
-      navigate({ to: destination(authRes.user) });
+      navigate({ to: "/ride" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Google sign-in failed");
     } finally {
@@ -99,14 +87,14 @@ function AuthPage() {
           role: "CUSTOMER",
         });
       } else {
-        authRes = await authApi.login({ email: email.trim(), password, expectedRole: role });
+        authRes = await authApi.login({ email: email.trim(), password, expectedRole: "CUSTOMER" });
       }
 
-      if (authRes.user.role !== role || authRes.user.isSuspended)
-        throw new Error("This account cannot access the selected portal.");
+      if (authRes.user.role !== "CUSTOMER" || authRes.user.isSuspended)
+        throw new Error("Please sign in with an active customer account.");
       storage.saveAuth(authRes);
       await router.invalidate();
-      navigate({ to: destination(authRes.user) });
+      navigate({ to: "/ride" });
     } catch (e) {
       console.error("Auth error:", e);
       setError(e instanceof Error ? e.message : "Authentication failed");
@@ -130,39 +118,19 @@ function AuthPage() {
             {mode === "signup" ? "Travel safely." : "Welcome back."}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Sign in to your {role.toLowerCase()} account.
+            Sign in to your customer account to book a ride.
           </p>
         </div>
 
-        <label className="mt-5 text-sm font-semibold">
-          Account type
-          <select
-            aria-label="Account type"
-            value={role}
-            disabled={loading}
-            onChange={(event) => {
-              setRole(event.target.value as AuthUser["role"]);
-              setMode("signin");
-              setError(null);
-            }}
-            className="mt-2 h-12 w-full rounded-xl border bg-background px-3"
-          >
-            <option value="CUSTOMER">Customer</option>
-            <option value="CAPTAIN">Captain</option>
-            <option value="ADMIN">Admin</option>
-          </select>
-        </label>
-        {role === "CUSTOMER" && (
-          <button
-            type="button"
-            onClick={handleGoogle}
-            disabled={loading}
-            className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
-          >
-            <GoogleGlyph />
-            Continue with Google
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={loading}
+          className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm font-bold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </button>
 
         <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-border" />
@@ -233,26 +201,20 @@ function AuthPage() {
             disabled={loading}
             className="h-14 w-full rounded-2xl bg-secondary text-sm font-bold text-secondary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
           >
-            {loading
-              ? "…"
-              : mode === "signup"
-                ? "Create account"
-                : `Sign in as ${role.toLowerCase()}`}
+            {loading ? "…" : mode === "signup" ? "Create account" : "Sign in"}
           </button>
         </form>
 
-        {role === "CUSTOMER" && (
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setMode(mode === "signup" ? "signin" : "signup");
-            }}
-            className="mt-6 text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
-          >
-            {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setMode(mode === "signup" ? "signin" : "signup");
+          }}
+          className="mt-6 text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
+        </button>
 
         <p className="mt-auto pt-10 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           By continuing you agree to our terms.
