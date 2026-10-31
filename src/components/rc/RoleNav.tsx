@@ -43,15 +43,13 @@ export function RoleNav() {
   };
 
   return (
-    <>
-      {/* spacer so page content never hides behind the bar */}
-      <div aria-hidden className="shrink-0" style={{ height: "var(--rc-nav-h, 104px)" }} />
-
-      <nav
-        ref={navRef}
-        aria-label="Main menu"
-        className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
-      >
+    // Sticky (not fixed): the bar takes up real space at the end of the page,
+    // so it can never float over buttons or content on any screen.
+    <nav
+      ref={navRef}
+      aria-label="Main menu"
+      className="sticky bottom-0 z-40 mt-auto px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
+    >
         <div className="mx-auto flex max-w-[480px] items-stretch gap-1 rounded-[26px] border border-border/70 bg-card/85 p-1.5 shadow-[0_10px_40px_-12px_hsl(var(--primary)/0.45)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
           {TABS.map(({ to, label, icon: Icon }) => {
             const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
