@@ -32,6 +32,15 @@ import {
   secondsUntil,
   toServerPayment,
 } from "@/lib/payments";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  confirmRazorpayPayment,
+  createRazorpayPayment,
+} from "@/lib/razorpay.functions";
+import {
+  RAZORPAY_CHECKOUT_DISMISSED,
+  openRazorpayCheckout,
+} from "@/lib/razorpay";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
