@@ -2639,8 +2639,8 @@ function PaymentStep({
               className="mx-auto h-52 w-52 rounded-xl bg-background p-2"
             />
           ) : (
-            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">
-              Payment checkout is unavailable. You can cancel or switch payment method.
+            <div className="mx-auto grid h-24 w-full max-w-[13rem] place-items-center rounded-xl bg-muted px-4 text-xs text-muted-foreground">
+              Pay securely with UPI, card or netbanking below.
             </div>
           )}
           <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">
