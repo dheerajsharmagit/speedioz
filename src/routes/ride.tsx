@@ -1576,6 +1576,7 @@ function RidePage() {
           )}
         </section>
       </div>
+      <RoleNav />
 
       {topupOpen && (
         <WalletTopup
