@@ -158,7 +158,6 @@ const impactStats = [
 function Landing() {
   return (
     <div id="home" className="min-h-screen bg-background text-foreground">
-      <RoleNav />
 
       {/* NAV */}
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
@@ -633,6 +632,7 @@ function Landing() {
           </div>
         </div>
       </footer>
+      <RoleNav />
     </div>
   );
 }

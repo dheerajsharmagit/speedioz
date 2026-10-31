@@ -61,7 +61,6 @@ function RoutesPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground">
-      <RoleNav />
       <div className="mx-auto max-w-6xl px-6 pt-8">
         <header className="pb-10">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -154,6 +153,7 @@ function RoutesPage() {
           </div>
         )}
       </div>
+      <RoleNav />
     </div>
   );
 }

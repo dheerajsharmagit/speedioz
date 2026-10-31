@@ -1128,7 +1128,6 @@ function RidePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <RoleNav />
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div className="hidden">
@@ -1577,6 +1576,7 @@ function RidePage() {
           )}
         </section>
       </div>
+      <RoleNav />
 
       {topupOpen && (
         <WalletTopup
@@ -1740,7 +1740,7 @@ function DestinationStep({
         </div>
       )}
 
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           disabled={!dest || !pickupConfirmed}
           onClick={onNext}
@@ -1832,7 +1832,7 @@ function VehicleStep({
         route.
       </div>
 
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           onClick={onNext}
           disabled={quotes[selected as keyof typeof quotes] == null}
@@ -2000,7 +2000,7 @@ function ConfirmStep({
         </div>
       </div>
 
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           onClick={onNext}
           disabled={busy}
@@ -2065,7 +2065,7 @@ function SearchingStep({
           </p>
         </div>
       </div>
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           onClick={onCancel}
           className="h-14 w-full rounded-full border border-border bg-background text-sm font-bold transition-transform active:scale-95"
@@ -2389,7 +2389,7 @@ function RatingStep({
         />
       </div>
 
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           onClick={onDone}
           disabled={rating === 0}
@@ -2683,7 +2683,7 @@ function PaymentStep({
         </div>
       )}
 
-      <div className="px-6 pb-12">
+      <div className="px-6 pb-[calc(var(--rc-nav-h,104px)+1rem)]">
         <button
           onClick={onCancel}
           className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold"

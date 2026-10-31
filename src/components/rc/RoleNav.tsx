@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { storage, authApi } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Home,
   Bike,
@@ -26,11 +26,29 @@ export function RoleNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [user, setUser] = useState(storage.getUser());
   const [moreOpen, setMoreOpen] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setUser(storage.getUser()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Keep the spacer in sync with the bar's real height (labels, safe area…).
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => {
+      document.documentElement.style.setProperty(
+        "--rc-nav-h",
+        `${Math.ceil(el.getBoundingClientRect().height)}px`,
+      );
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
 
   const logout = async () => {
     try {
@@ -43,9 +61,10 @@ export function RoleNav() {
   return (
     <>
       {/* spacer so page content never hides behind the bar */}
-      <div aria-hidden className="h-24" />
+      <div aria-hidden className="shrink-0" style={{ height: "var(--rc-nav-h, 104px)" }} />
 
       <nav
+        ref={navRef}
         aria-label="Main menu"
         className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
       >
