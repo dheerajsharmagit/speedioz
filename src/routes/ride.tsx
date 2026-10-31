@@ -2647,6 +2647,13 @@ function PaymentStep({
             Expires in {mm}:{ss}
           </p>
           <div className="mt-4 grid gap-2">
+            <button
+              disabled={rzBusy || status === "PAID"}
+              onClick={payWithRazorpay}
+              className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-lg transition-transform active:scale-95 disabled:opacity-60"
+            >
+              {rzBusy ? "Opening secure checkout…" : `Pay ₹${fare} with UPI / Card`}
+            </button>
             {upi && (
               <a
                 href={upi}
