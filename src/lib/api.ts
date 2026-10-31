@@ -156,6 +156,24 @@ async function refreshToken(): Promise<string> {
   return token;
 }
 
+const NETWORK_RETRY_DELAY_MS = 1200;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Transient network failures (flaky mobile data, brief upstream outages) are
+// the most common cause of a failed sign-up. Retry each transport once before
+// giving up so a momentary blip doesn't surface as an error to the rider.
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    await sleep(NETWORK_RETRY_DELAY_MS);
+    return await fetch(url, init);
+  }
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = storage.getAccessToken();
 
@@ -165,31 +183,36 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const requestInit = { ...init, headers };
   let response;
   try {
-    response = await fetch(`${API_URL}${path}`, { ...init, headers });
-  } catch (e: any) {
-    // A CORS rejection or network failure surfaces as a TypeError — retry once
-    // through the same-origin proxy before giving up.
-    if (API_URL !== PROXY_API_URL) {
+    try {
+      response = await fetchWithRetry(`${API_URL}${path}`, requestInit);
+    } catch {
+      // A CORS rejection or network failure surfaces as a TypeError — retry
+      // through the same-origin proxy, which reaches the server even when the
+      // direct connection is blocked.
+      if (API_URL === PROXY_API_URL) throw new Error("RIDEHER server unreachable");
       fallbackToProxy();
-      try {
-        response = await fetch(`${PROXY_API_URL}${path}`, { ...init, headers });
-      } catch (e2: any) {
-        console.error(`API fetch error (${path}):`, e2);
-        throw new RequestError(503, {
-          code: "FETCH_ERROR",
-          message: "Unable to connect to RIDEHER server. Please check your internet connection.",
-          requestId: "internal",
-        });
-      }
-    } else {
-      console.error(`API fetch error (${path}):`, e);
-      throw new RequestError(503, {
-        code: "FETCH_ERROR",
-        message: "Unable to connect to RIDEHER server. Please check your internet connection.",
-        requestId: "internal",
-      });
+      response = await fetchWithRetry(`${PROXY_API_URL}${path}`, requestInit);
+    }
+  } catch (e) {
+    console.error(`API fetch error (${path}):`, e);
+    throw new RequestError(503, {
+      code: "FETCH_ERROR",
+      message: "Unable to connect to RIDEHER server. Please check your internet connection.",
+      requestId: "internal",
+    });
+  }
+
+  // A 502/504 from the proxy means the upstream server was momentarily
+  // unreachable — one more try before showing an error.
+  if (response.status === 502 || response.status === 504) {
+    await sleep(NETWORK_RETRY_DELAY_MS);
+    try {
+      response = await fetch(`${API_URL}${path}`, requestInit);
+    } catch {
+      // keep the original 502/504 response
     }
   }
 
