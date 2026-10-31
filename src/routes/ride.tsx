@@ -1137,7 +1137,7 @@ function RidePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <RoleNav />
-      <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background shadow-2xl">
+      <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background pb-[calc(env(safe-area-inset-bottom)+104px)] shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div className="hidden">
             '''Do not make any visual modifications. The phrases I write are commands to understand
