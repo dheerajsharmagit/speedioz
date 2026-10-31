@@ -1115,7 +1115,7 @@ function RidePage() {
 
   if (recovering || bookingError)
     return (
-      <div className="min-h-screen bg-background p-8 text-center">
+      <div className="flex min-h-screen flex-col bg-background p-8 text-center">
         <p role="status">{bookingError ?? "Checking for an existing ride…"}</p>
         {bookingError && (
           <button className="mt-4 underline" onClick={() => window.location.reload()}>
