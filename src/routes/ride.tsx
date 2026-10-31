@@ -2533,6 +2533,48 @@ function PaymentStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, expired, status]);
 
+  // Pay through Razorpay test checkout (UPI / card / netbanking). On success
+  // the signature is verified server-side before the ride proceeds.
+  async function payWithRazorpay() {
+    setRzBusy(true);
+    try {
+      const order = await createOrderFn({
+        data: { amount: fare, description: `RIDEHER ride ${rideId}` },
+      });
+      if (!order.ok) throw new Error(order.error);
+      let paid;
+      try {
+        paid = await openRazorpayCheckout({
+          keyId: order.keyId,
+          orderId: order.orderId,
+          amount: order.amount,
+          name: "RIDEHER",
+          description: "Ride fare",
+        });
+      } catch (e) {
+        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
+        throw e;
+      }
+      const check = await confirmFn({
+        data: {
+          orderId: paid.razorpay_order_id,
+          paymentId: paid.razorpay_payment_id,
+          signature: paid.razorpay_signature,
+          expectedAmount: order.amount,
+        },
+      });
+      if (!check.ok) throw new Error(check.error);
+      paidLocallyRef.current = true;
+      setStatus("PAID");
+      onPaid();
+    } catch (e) {
+      console.error("Razorpay payment failed", e);
+      setStatus("FAILED");
+    } finally {
+      setRzBusy(false);
+    }
+  }
+
   const mm = String(Math.floor(left / 60)).padStart(2, "0");
   const ss = String(left % 60).padStart(2, "0");
   const qr = intent.metadata?.qrCode;
