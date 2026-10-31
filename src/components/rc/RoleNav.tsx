@@ -47,7 +47,7 @@ export function RoleNav() {
 
       <nav
         aria-label="Main menu"
-        className="fixed inset-x-0 bottom-0 z-50 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
+        className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
       >
         <div className="mx-auto flex max-w-[480px] items-stretch gap-1 rounded-[26px] border border-border/70 bg-card/85 p-1.5 shadow-[0_10px_40px_-12px_hsl(var(--primary)/0.45)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
           {TABS.map(({ to, label, icon: Icon }) => {
