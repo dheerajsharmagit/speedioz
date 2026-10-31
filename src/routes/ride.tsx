@@ -32,6 +32,15 @@ import {
   secondsUntil,
   toServerPayment,
 } from "@/lib/payments";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  confirmRazorpayPayment,
+  createRazorpayPayment,
+} from "@/lib/razorpay.functions";
+import {
+  RAZORPAY_CHECKOUT_DISMISSED,
+  openRazorpayCheckout,
+} from "@/lib/razorpay";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
@@ -888,10 +897,57 @@ function RidePage() {
     }
   }
 
-  async function handleTopup(_amount: number) {
-    alert(
-      "Wallet top-up is unavailable until secure payment checkout is connected. Please choose another payment method.",
-    );
+  const createRazorpayOrderFn = useServerFn(createRazorpayPayment);
+  const confirmRazorpayPaymentFn = useServerFn(confirmRazorpayPayment);
+
+  // Wallet top-up: pay through Razorpay test checkout, then credit the wallet
+  // on the RIDEHER backend once the payment verifies.
+  async function handleTopup(amount: number) {
+    setTopupBusy(true);
+    try {
+      const order = await createRazorpayOrderFn({
+        data: { amount, description: "RIDEHER wallet top-up" },
+      });
+      if (!order.ok) {
+        alert("Payment checkout isn't available right now. Please try again shortly.");
+        return;
+      }
+      let paid;
+      try {
+        paid = await openRazorpayCheckout({
+          keyId: order.keyId,
+          orderId: order.orderId,
+          amount: order.amount,
+          name: "RIDEHER",
+          description: "Wallet top-up",
+        });
+      } catch (e) {
+        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
+        throw e;
+      }
+      const check = await confirmRazorpayPaymentFn({
+        data: {
+          orderId: paid.razorpay_order_id,
+          paymentId: paid.razorpay_payment_id,
+          signature: paid.razorpay_signature,
+          expectedAmount: order.amount,
+        },
+      });
+      if (!check.ok) {
+        alert(
+          "We couldn't verify the payment. If money was debited, it will be refunded automatically.",
+        );
+        return;
+      }
+      const { balance } = await walletApi.topup(amount);
+      setWalletBalance(balance);
+      setTopupOpen(false);
+    } catch (e) {
+      console.error("Wallet top-up failed", e);
+      alert("Couldn't complete the top-up. Please try again.");
+    } finally {
+      setTopupBusy(false);
+    }
   }
 
   function onPaid() {
@@ -2438,11 +2494,15 @@ function PaymentStep({
   onSwitch: () => void;
   onCancel: () => void;
 }) {
+  const createOrderFn = useServerFn(createRazorpayPayment);
+  const confirmFn = useServerFn(confirmRazorpayPayment);
   const [fallbackExpiry] = useState(() => new Date(Date.now() + 15 * 60 * 1000).toISOString());
   const expiresAt = intent.metadata?.expiresAt ?? fallbackExpiry;
   const [left, setLeft] = useState(() => secondsUntil(expiresAt));
   const [status, setStatus] = useState<PaymentStatus>("PENDING");
   const [busy, setBusy] = useState(false);
+  const [rzBusy, setRzBusy] = useState(false);
+  const paidLocallyRef = useRef(false);
   const expired = left <= 0 || status === "EXPIRED";
 
   useEffect(() => {
@@ -2455,6 +2515,8 @@ function PaymentStep({
     if (status === "PAID") return;
     let cancelled = false;
     const check = async () => {
+      // A verified Razorpay payment decides the outcome; ignore backend lag.
+      if (paidLocallyRef.current) return;
       try {
         const s = await paymentApi.forRide(rideId);
         if (cancelled) return;
@@ -2472,6 +2534,48 @@ function PaymentStep({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, expired, status]);
+
+  // Pay through Razorpay test checkout (UPI / card / netbanking). On success
+  // the signature is verified server-side before the ride proceeds.
+  async function payWithRazorpay() {
+    setRzBusy(true);
+    try {
+      const order = await createOrderFn({
+        data: { amount: fare, description: `RIDEHER ride ${rideId}` },
+      });
+      if (!order.ok) throw new Error(order.error);
+      let paid;
+      try {
+        paid = await openRazorpayCheckout({
+          keyId: order.keyId,
+          orderId: order.orderId,
+          amount: order.amount,
+          name: "RIDEHER",
+          description: "Ride fare",
+        });
+      } catch (e) {
+        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
+        throw e;
+      }
+      const check = await confirmFn({
+        data: {
+          orderId: paid.razorpay_order_id,
+          paymentId: paid.razorpay_payment_id,
+          signature: paid.razorpay_signature,
+          expectedAmount: order.amount,
+        },
+      });
+      if (!check.ok) throw new Error(check.error);
+      paidLocallyRef.current = true;
+      setStatus("PAID");
+      onPaid();
+    } catch (e) {
+      console.error("Razorpay payment failed", e);
+      setStatus("FAILED");
+    } finally {
+      setRzBusy(false);
+    }
+  }
 
   const mm = String(Math.floor(left / 60)).padStart(2, "0");
   const ss = String(left % 60).padStart(2, "0");
@@ -2535,14 +2639,21 @@ function PaymentStep({
               className="mx-auto h-52 w-52 rounded-xl bg-background p-2"
             />
           ) : (
-            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">
-              Payment checkout is unavailable. You can cancel or switch payment method.
+            <div className="mx-auto grid h-24 w-full max-w-[13rem] place-items-center rounded-xl bg-muted px-4 text-xs text-muted-foreground">
+              Pay securely with UPI, card or netbanking below.
             </div>
           )}
           <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">
             Expires in {mm}:{ss}
           </p>
           <div className="mt-4 grid gap-2">
+            <button
+              disabled={rzBusy || status === "PAID"}
+              onClick={payWithRazorpay}
+              className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-lg transition-transform active:scale-95 disabled:opacity-60"
+            >
+              {rzBusy ? "Opening secure checkout…" : `Pay ₹${fare} with UPI / Card`}
+            </button>
             {upi && (
               <a
                 href={upi}
