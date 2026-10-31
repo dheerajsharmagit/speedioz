@@ -28,27 +28,6 @@ export function RoleNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    const interval = setInterval(() => setUser(storage.getUser()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Keep the spacer in sync with the bar's real height (labels, safe area…).
-  useEffect(() => {
-    const el = navRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => {
-      document.documentElement.style.setProperty(
-        "--rc-nav-h",
-        `${Math.ceil(el.getBoundingClientRect().height)}px`,
-      );
-    };
-    apply();
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
 
   const logout = async () => {
     try {
