@@ -2175,6 +2175,8 @@ function MatchedStep({ ride, cancelSlot }: { ride: Ride; cancelSlot?: ReactNode 
           </a>
         </div>
       </div>
+
+      {cancelSlot}
     </>
   );
 }
