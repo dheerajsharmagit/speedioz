@@ -262,14 +262,20 @@ export const authApi = {
 
 // Ride methods
 export const rideApi = {
-  create: (data: RideRequest) =>
-    api<{ data: CanonicalRide }>('/rides/request', { method: 'POST', body: JSON.stringify(data) }),
+  // Returns { ride, paymentIntent? } (newer backend) or { data } (older); use parseCreateRide.
+  create: (data: RideRequest, idempotencyKey?: string) =>
+    api<any>('/rides/request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    }),
   estimate: (data: { pickup: { latitude: number; longitude: number }; destination: { latitude: number; longitude: number } }) =>
     api<{ data: RideEstimate }>('/rides/estimate', { method: 'POST', body: JSON.stringify(data) }),
   bookingDetails: (id: string) => api<{ data: BookingDetails }>(`/rides/${id}/booking-details`),
   cancel: (id: string, reason: string) =>
     api<{ data: CanonicalRide }>(`/rides/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  rate: (id: string, data: { stars: number; tip?: number }) =>
+  history: async () => unwrapList(await api<any>('/rides/history/me')) as RideHistoryItem[],
+  rate: (id: string, data: { stars: number; tip?: number; comment?: string }) =>
     api(`/rides/${id}/rate`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
@@ -313,7 +319,52 @@ export type RideRequest = {
   dropLng: number;
   dropAddress: string;
   vehicleType: 'BIKE' | 'AUTO' | 'CAB';
-  paymentMethod: 'CASH' | 'CARD' | 'UPI';
+  paymentMethod: PaymentMethodId;
+};
+
+export type PaymentMethodId = 'CASH' | 'CARD' | 'UPI' | 'WALLET';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED';
+
+export type PaymentIntent = {
+  id?: string;
+  status?: PaymentStatus;
+  metadata?: { qrCode?: string; upiIntent?: string; checkoutUrl?: string; expiresAt?: string };
+};
+
+export type RideHistoryItem = {
+  id: string;
+  status: CanonicalRideStatus;
+  pickupAddress?: string;
+  dropAddress?: string;
+  fareEstimate?: number;
+  fareFinal?: number | null;
+  paymentMethod?: PaymentMethodId;
+  paymentStatus?: PaymentStatus;
+  paymentIntents?: PaymentIntent[];
+  vehicleType?: string;
+  distanceMeters?: number;
+  durationSeconds?: number;
+  createdAt?: string;
+};
+
+/** Normalise the create-ride response across backend versions. */
+export function parseCreateRide(res: any): { ride: CanonicalRide; paymentIntent: PaymentIntent | null } {
+  const ride = res?.ride ?? res?.data?.ride ?? res?.data ?? res;
+  const paymentIntent = res?.paymentIntent ?? res?.data?.paymentIntent ?? null;
+  return { ride, paymentIntent };
+}
+
+export function normalizePaymentStatus(res: any): PaymentStatus {
+  const d = res?.data ?? res ?? {};
+  const raw = String(d.status ?? d.paymentStatus ?? 'PENDING').toUpperCase();
+  if (raw === 'PAID' || raw === 'SUCCEEDED' || raw === 'SUCCESS' || raw === 'CAPTURED') return 'PAID';
+  if (raw === 'FAILED') return 'FAILED';
+  if (raw === 'EXPIRED') return 'EXPIRED';
+  return 'PENDING';
+}
+
+export const paymentApi = {
+  forRide: async (rideId: string) => normalizePaymentStatus(await api<any>(`/payments/ride/${rideId}`)),
 };
 
 export type CanonicalRide = RideRequest & {
@@ -349,6 +400,7 @@ export type BookingDetails = {
     rating: number | null;
   } | null;
   captainLocation: { lat: number; lng: number } | null;
+  customer?: { name?: string; phone?: string | null } | null;
   otp?: string;
 };
 
@@ -402,6 +454,9 @@ export const captainApi = {
       method: 'POST',
       body: JSON.stringify({ status: 'ACCEPTED' }),
     }),
+  offers: async () => unwrapList(await firstOk<any>(['/rides/offers/me', '/rides/available'])),
+  acceptOffer: (id: string) => api<any>(`/rides/${id}/accept`, { method: 'POST', body: JSON.stringify({}) }),
+  arrived: (id: string) => api<any>(`/rides/${id}/arrived`, { method: 'POST', body: JSON.stringify({}) }),
   decline: (id: string) =>
     firstOk<any>([`/rides/${id}/reject`, `/rides/${id}/decline`], { method: 'POST', body: JSON.stringify({}) }),
   setStatus: (id: string, status: string) =>

@@ -9,6 +9,8 @@ import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
+import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus } from "@/lib/api";
+import { defaultPaymentMethod, needsOnlinePayment, secondsUntil, toServerPayment } from "@/lib/payments";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
@@ -113,6 +115,7 @@ type UiStep =
   | "destination"
   | "vehicle"
   | "confirm"
+  | "payment"
   | "searching"
   | "matched"
   | "arriving"
@@ -121,7 +124,7 @@ type UiStep =
   | "cancelled"
   | "rating";
 
-type Payment = "upi" | "cash" | "card";
+type Payment = "wallet" | "upi" | "cash" | "card";
 
 function stepFromStatus(status: RideStatus): UiStep {
   switch (status) {
@@ -237,7 +240,19 @@ function RidePage() {
   const firstFixRef = useRef(false);
 
   const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
-  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev", number>>>({});
+  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev" | "cab", number>>>({});
+  const [vehicleAvailability, setVehicleAvailability] = useState<Partial<Record<"BIKE" | "AUTO" | "CAB", boolean>>>({});
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletShortfall, setWalletShortfall] = useState<{ balance: number; fare: number } | null>(null);
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
+  const [redispatching, setRedispatching] = useState(false);
+  const [rateComment, setRateComment] = useState("");
+  const awaitingPaymentRef = useRef(false);
+  const paymentPickedRef = useRef(false);
+  const idemKeyRef = useRef<string | null>(null);
+  const stepRef = useRef<UiStep>("destination");
   const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
   const [nearbyCaptains, setNearbyCaptains] = useState<{ lat: number; lng: number }[]>([]);
 
@@ -320,6 +335,12 @@ function RidePage() {
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
   const fare = fareQuotes[selected as "bike" | "auto" | "ev" | "cab"] ?? vehicle.price;
   const smartSavings = 12;
+  useEffect(() => { stepRef.current = step; }, [step]);
+  // Wallet is the default method whenever its balance covers the fare.
+  useEffect(() => {
+    if (paymentPickedRef.current) return;
+    setPayment(defaultPaymentMethod(walletBalance, fare));
+  }, [walletBalance, fare]);
 
   // Real-time ride updates via Socket.IO
   useEffect(() => {
@@ -343,7 +364,18 @@ function RidePage() {
           ...updatedRide,
           otp: updatedRide.otp || current?.otp || "",
         }));
-        setStep(stepFromStatus(updatedRide.status));
+        const next = stepFromStatus(updatedRide.status);
+        if (next === "cancelled") {
+          awaitingPaymentRef.current = false;
+          setPaymentIntent(null);
+        }
+        // While the customer is paying, the ride stays on the payment screen.
+        if (!(awaitingPaymentRef.current && next === "searching")) {
+          const prev = stepRef.current;
+          if (next === "searching" && (prev === "matched" || prev === "arriving")) setRedispatching(true);
+          if (next !== "searching") setRedispatching(false);
+          setStep(next);
+        }
         if (response.data.captainLocation) setCaptainPos(response.data.captainLocation);
       } catch (error) {
         console.warn("Could not refresh ride booking details", error);
@@ -371,6 +403,8 @@ function RidePage() {
         captain_lng: data.captainLocation?.lng ?? current.captain_lng,
       } : current);
       if (data.captainLocation) setCaptainPos(data.captainLocation);
+      awaitingPaymentRef.current = false;
+      setRedispatching(false);
       setStep("matched");
       void refreshBooking();
     });
@@ -379,11 +413,23 @@ function RidePage() {
       setCaptainPos({ lat: data.lat, lng: data.lng });
       setRide((current) => current ? { ...current, captain_lat: data.lat, captain_lng: data.lng } : current);
     });
+    socket.on("ride:searching", (data: { rideId?: string }) => {
+      if (data?.rideId && data.rideId !== ride.id) return;
+      const prev = stepRef.current;
+      if (prev === "matched" || prev === "arriving") {
+        setRedispatching(true);
+        setCaptainPos(null);
+        setApproachPolyline("");
+        setStep("searching");
+      }
+    });
     socket.on("ride:arriving", refreshBooking);
     socket.on("ride:started", refreshBooking);
     socket.on("ride:completed", refreshBooking);
     socket.on("ride:cancelled", (data: { rideId?: string; status?: string }) => {
       if (data.rideId === ride.id) {
+        awaitingPaymentRef.current = false;
+        setPaymentIntent(null);
         // Cancellation is terminal. Clear the active booking immediately so
         // the rider is not trapped on a stale matched/current-ride screen.
         setRide(null);
@@ -568,11 +614,13 @@ function RidePage() {
       return;
     }
     // Wallet pre-check: never submit a booking the balance can't cover.
-    const quote = fareQuotes[selected as "bike" | "auto" | "ev" | "cab"];
-    if (quote != null && walletBalance != null && walletBalance < quote) {
-      setWalletShortfall({ balance: walletBalance, fare: quote });
+    if (payment === "wallet" && walletBalance != null && walletBalance < fare) {
+      setWalletShortfall({ balance: walletBalance, fare });
       return;
     }
+    setWalletShortfall(null);
+    // Same key on network retries so the server never books twice.
+    if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     setCreating(true);
     try {
       const response = await rideApi.create({
@@ -584,10 +632,18 @@ function RidePage() {
         dropLng: dest.lng,
         // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
         vehicleType: (selected === "ev" ? "BIKE" : selected.toUpperCase()) as "BIKE" | "AUTO" | "CAB",
-        paymentMethod: payment === "upi" ? "UPI" : payment === "cash" ? "CASH" : "CARD",
-      });
-      setRide(toClientRide(response.data));
-      setStep("searching");
+        paymentMethod: toServerPayment(payment),
+      }, idemKeyRef.current);
+      const created = parseCreateRide(response);
+      setRide(toClientRide(created.ride));
+      idemKeyRef.current = null;
+      if (needsOnlinePayment(payment) && created.paymentIntent) {
+        awaitingPaymentRef.current = true;
+        setPaymentIntent(created.paymentIntent);
+        setStep("payment");
+      } else {
+        setStep("searching");
+      }
     } catch (e: any) {
       console.error(e);
       const code = e?.error?.code;
@@ -623,10 +679,43 @@ function RidePage() {
     }
   }
 
+  function onPaid() {
+    awaitingPaymentRef.current = false;
+    setPaymentIntent(null);
+    setStep("searching");
+  }
+
+  async function switchPaymentMethod() {
+    // Expired/abandoned payment: cancel this booking and let the rider pick again.
+    if (ride) await rideApi.cancel(ride.id, "Payment expired — switching method").catch(() => {});
+    awaitingPaymentRef.current = false;
+    setPaymentIntent(null);
+    setRide(null);
+    paymentPickedRef.current = false;
+    setStep("confirm");
+  }
+
+  async function retryPayment() {
+    if (ride) await rideApi.cancel(ride.id, "Payment expired — retrying").catch(() => {});
+    awaitingPaymentRef.current = false;
+    setPaymentIntent(null);
+    setRide(null);
+    await createRide();
+  }
+
+  async function cancelDuringPayment() {
+    if (ride) await rideApi.cancel(ride.id, "Cancelled during payment").catch(() => {});
+    awaitingPaymentRef.current = false;
+    setPaymentIntent(null);
+    setRide(null);
+    setStep("destination");
+  }
+
   async function cancelSearch() {
     if (ride) {
-      await rideApi.cancel(ride.id, "Cancelled by customer");
+      await rideApi.cancel(ride.id, "Cancelled by customer").catch(() => {});
     }
+    setRedispatching(false);
     setRide(null);
     setEncodedPolyline("");
     setRouteSteps([]);
@@ -638,7 +727,12 @@ function RidePage() {
 
   async function submitRating() {
     if (!ride) return;
-    await rideApi.rate(ride.id, { stars: rating, tip });
+    try {
+      await rideApi.rate(ride.id, { stars: rating, tip: tip || undefined, comment: rateComment.trim() || undefined });
+    } catch (e) {
+      console.warn("Rating failed", e);
+    }
+    setRateComment("");
     // reset
     setRide(null);
     setDest(null);
@@ -1117,7 +1211,8 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               useSmartRoute={useSmartRoute}
               smartSavings={smartSavings}
               payment={payment}
-              setPayment={setPayment}
+              setPayment={(p) => { paymentPickedRef.current = true; setPayment(p); setWalletShortfall(null); }}
+              walletBalance={walletBalance}
               onNext={createRide}
               busy={creating}
               walletShortfall={walletShortfall}
@@ -1129,7 +1224,20 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
 
           )}
 
-          {step === "searching" && <SearchingStep onCancel={cancelSearch} />}
+          {step === "payment" && ride && paymentIntent && (
+            <PaymentStep
+              rideId={ride.id}
+              method={payment}
+              fare={fare}
+              intent={paymentIntent}
+              onPaid={onPaid}
+              onRetry={retryPayment}
+              onSwitch={switchPaymentMethod}
+              onCancel={cancelDuringPayment}
+            />
+          )}
+
+          {step === "searching" && <SearchingStep onCancel={cancelSearch} redispatching={redispatching} />}
 
           {step === "matched" && ride && <MatchedStep ride={ride} />}
 
@@ -1183,6 +1291,8 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               setRating={setRating}
               tip={tip}
               setTip={setTip}
+              comment={rateComment}
+              setComment={setRateComment}
               onDone={submitRating}
             />
           )}
@@ -1207,6 +1317,7 @@ function StepIndicator({ step }: { step: UiStep }) {
     destination: "01 · Where to",
     vehicle: "02 · Vehicle",
     confirm: "03 · Confirm",
+    payment: "03 · Payment",
     searching: "04 · Matching",
     matched: "05 · Matched",
     arriving: "06 · Pickup",
@@ -1451,8 +1562,9 @@ function VehicleStep({
 
 /* ---------- Confirm ---------- */
 function ConfirmStep({
-  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel, walletShortfall, onAddMoney,
+  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel, walletShortfall, onAddMoney, walletBalance,
 }: {
+  walletBalance: number | null;
   vehicle: Vehicle;
   fare: number;
   useSmartRoute: boolean;
@@ -1468,9 +1580,10 @@ function ConfirmStep({
   dropLabel: string;
 }) {
   const methods: { id: Payment; label: string; sub: string }[] = [
-    { id: "upi", label: "UPI", sub: "rider@okhdfc" },
-    { id: "cash", label: "Cash", sub: "Pay on arrival" },
-    { id: "card", label: "Card", sub: "•••• 4421" },
+    { id: "wallet", label: "Wallet", sub: walletBalance != null ? `₹${walletBalance} balance` : "RIDEHER wallet" },
+    { id: "upi", label: "UPI", sub: "Scan QR / UPI app" },
+    { id: "card", label: "Card", sub: "Secure checkout" },
+    { id: "cash", label: "Cash", sub: "Pay on drop" },
   ];
   return (
     <>
@@ -1546,12 +1659,14 @@ function ConfirmStep({
 
       <div className="mb-6 px-6">
         <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payment</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {methods.map((m) => {
             const active = m.id === payment;
             return (
               <button
                 key={m.id}
+                role="radio"
+                aria-checked={active}
                 onClick={() => setPayment(m.id)}
                 className={`rounded-2xl border p-3 text-left transition ${
                   active ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background"
@@ -1574,7 +1689,7 @@ function ConfirmStep({
           {busy ? "Requesting…" : `Book · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          OTP shared with captain on pickup
+          {payment === "upi" || payment === "card" ? "You'll pay before we find your captain" : "OTP shared with captain on pickup"}
         </p>
       </div>
     </>
@@ -1591,13 +1706,16 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
 }
 
 /* ---------- Searching ---------- */
-function SearchingStep({ onCancel }: { onCancel: () => void }) {
+function SearchingStep({ onCancel, redispatching }: { onCancel: () => void; redispatching?: boolean }) {
   return (
     <>
       <div className="mb-4 px-6 text-center">
         <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Matching</p>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Finding a captain</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Pinging nearby riders…</p>
+        <div className="mx-auto mt-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary" aria-hidden />
+        <h2 className="mt-4 text-2xl font-extrabold tracking-tight">{redispatching ? "Finding another captain…" : "Searching…"}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {redispatching ? "Your captain went offline. We're matching you with someone nearby." : "Pinging nearby women captains…"}
+        </p>
       </div>
       <div className="mb-6 px-6">
         <div className="rounded-2xl bg-muted p-4">
@@ -1660,6 +1778,7 @@ function MatchedStep({ ride }: { ride: Ride }) {
           <div className="my-3 h-px bg-border" />
           <div>
             <p className="font-mono text-[10px] uppercase text-muted-foreground">Share OTP on pickup</p>
+            {ride.otp && <p className="mt-1 text-3xl font-extrabold tracking-[0.3em] text-primary">Share: {ride.otp}</p>}
             {ride.otp ? (
               <div className="mt-2 flex gap-2">
                 {ride.otp.split("").map((d: string, i: number) => (
@@ -1677,8 +1796,16 @@ function MatchedStep({ ride }: { ride: Ride }) {
 
       <div className="px-6 pb-8">
         <div className="grid grid-cols-2 gap-2">
-          <button className="h-12 rounded-full border border-border bg-background text-sm font-bold">Call</button>
-          <button className="h-12 rounded-full border border-border bg-background text-sm font-bold">Message</button>
+          <a
+            href={ride.captain_phone ? `tel:${ride.captain_phone}` : undefined}
+            aria-disabled={!ride.captain_phone}
+            className={`grid h-12 place-items-center rounded-full border border-border bg-background text-sm font-bold ${ride.captain_phone ? "" : "pointer-events-none opacity-50"}`}
+          >Call captain</a>
+          <a
+            href={ride.captain_phone ? `sms:${ride.captain_phone}` : undefined}
+            aria-disabled={!ride.captain_phone}
+            className={`grid h-12 place-items-center rounded-full border border-border bg-background text-sm font-bold ${ride.captain_phone ? "" : "pointer-events-none opacity-50"}`}
+          >Message</a>
         </div>
       </div>
     </>
@@ -1760,8 +1887,12 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
       <div className="mb-6 px-6">
         <div className="rounded-2xl border border-border p-5">
           <div className="flex items-baseline justify-between">
-            <p className="text-sm font-bold">Total to pay</p>
+            <p className="text-sm font-bold">Total fare</p>
             <p className="text-3xl font-extrabold">₹{fare}</p>
+          </div>
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+            <div className="flex justify-between"><span>Ride fare</span><span>₹{Math.round(fare * 0.95)}</span></div>
+            <div className="flex justify-between"><span>Taxes & fees</span><span>₹{fare - Math.round(fare * 0.95)}</span></div>
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -1777,7 +1908,7 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
           onClick={onNext}
           className="h-14 w-full rounded-full bg-primary text-base font-bold text-secondary shadow-xl transition-transform active:scale-95"
         >
-          Pay & rate
+          Rate your ride
         </button>
       </div>
     </>
@@ -1795,8 +1926,10 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 /* ---------- Rating ---------- */
 function RatingStep({
-  captainName, rating, setRating, tip, setTip, onDone,
+  captainName, rating, setRating, tip, setTip, comment, setComment, onDone,
 }: {
+  comment: string;
+  setComment: (s: string) => void;
   captainName: string;
   rating: number;
   setRating: (n: number) => void;
@@ -1845,6 +1978,18 @@ function RatingStep({
             );
           })}
         </div>
+      </div>
+
+      <div className="mb-6 px-6">
+        <label className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground" htmlFor="rate-comment">Comment (optional)</label>
+        <textarea
+          id="rate-comment"
+          value={comment}
+          maxLength={500}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="How was your ride?"
+          className="min-h-20 w-full rounded-2xl border border-border bg-background p-3 text-sm"
+        />
       </div>
 
       <div className="px-6 pb-12">
@@ -1925,5 +2070,107 @@ function WalletTopup({ balance, busy, onClose, onTopup }: {
         </button>
       </div>
     </div>
+  );
+}
+
+/* ---------- Online payment (UPI / Card) ---------- */
+function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, onCancel }: {
+  rideId: string;
+  method: Payment;
+  fare: number;
+  intent: PaymentIntent;
+  onPaid: () => void;
+  onRetry: () => void;
+  onSwitch: () => void;
+  onCancel: () => void;
+}) {
+  const expiresAt = intent.metadata?.expiresAt;
+  const [left, setLeft] = useState(() => secondsUntil(expiresAt));
+  const [status, setStatus] = useState<PaymentStatus>("PENDING");
+  const [busy, setBusy] = useState(false);
+  const expired = left <= 0 || status === "EXPIRED";
+
+  useEffect(() => {
+    const id = window.setInterval(() => setLeft(secondsUntil(expiresAt)), 1000);
+    return () => window.clearInterval(id);
+  }, [expiresAt]);
+
+  // Poll every 3s until paid; webhooks can be delayed, so keep checking.
+  useEffect(() => {
+    if (expired || status === "PAID") return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const s = await paymentApi.forRide(rideId);
+        if (cancelled) return;
+        setStatus(s);
+        if (s === "PAID") onPaid();
+      } catch (e) {
+        console.warn("Payment status check failed", e);
+      }
+    };
+    void check();
+    const id = window.setInterval(check, 3000);
+    return () => { cancelled = true; window.clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rideId, expired, status]);
+
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  const qr = intent.metadata?.qrCode;
+  const upi = intent.metadata?.upiIntent;
+  const checkout = intent.metadata?.checkoutUrl;
+
+  return (
+    <>
+      <div className="mb-4 px-6 text-center">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{method === "card" ? "Card payment" : "UPI payment"}</p>
+        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{fare} to book</h2>
+        <p className="mt-1 text-xs text-muted-foreground">We'll find your captain as soon as payment is confirmed.</p>
+      </div>
+
+      {status === "FAILED" && !expired && (
+        <div className="mx-6 mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold">
+          Payment failed. Try again or pick another method.
+        </div>
+      )}
+
+      {expired ? (
+        <div className="mx-6 mb-6 rounded-2xl border border-border bg-muted p-5 text-center">
+          <p className="text-base font-bold">Payment time ran out</p>
+          <p className="mt-1 text-xs text-muted-foreground">No money was taken. Try again or choose another way to pay.</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={async () => { setBusy(true); try { await onRetry(); } finally { setBusy(false); } }} className="h-12 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60">
+              {busy ? "Retrying…" : "Retry"}
+            </button>
+            <button onClick={onSwitch} className="h-12 rounded-full border border-border bg-background text-sm font-bold">Switch method</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
+          {qr ? (
+            <img src={qr} alt="Scan to pay with any UPI app" className="mx-auto h-52 w-52 rounded-xl bg-background p-2" />
+          ) : (
+            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">QR loading…</div>
+          )}
+          <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">Expires in {mm}:{ss}</p>
+          <div className="mt-4 grid gap-2">
+            {upi && (
+              <a href={upi} className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Pay with UPI app</a>
+            )}
+            {checkout && method === "card" && (
+              <a href={checkout} target="_blank" rel="noreferrer" className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Open card checkout</a>
+            )}
+          </div>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for payment confirmation…
+          </div>
+        </div>
+      )}
+
+      <div className="px-6 pb-12">
+        <button onClick={onCancel} className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold">Cancel booking</button>
+      </div>
+    </>
   );
 }
