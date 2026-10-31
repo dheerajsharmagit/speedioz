@@ -5,23 +5,22 @@ import {
   type GoogleLatLng,
   loadGoogleMaps,
 } from "@/lib/google-maps-loader";
-import { computeRoute } from "@/lib/routes.functions";
 import { useTheme } from "@/lib/theme";
 
 interface Props {
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
   className?: string;
+  encodedPolyline?: string;
 }
 
-const cache = new Map<string, string>();
-
-export function RoutePreviewMap({ from, to, className }: Props) {
+export function RoutePreviewMap({ from, to, className, encodedPolyline }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState(false);
   const { markers } = useTheme();
 
   useEffect(() => {
+    setError(false);
     let cancelled = false;
     let map: GoogleMap | null = null;
     let poly: GooglePolyline | null = null;
@@ -50,25 +49,29 @@ export function RoutePreviewMap({ from, to, className }: Props) {
         new g.maps.Marker({
           position: from,
           map,
-          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: markers.pickupFill, fillOpacity: 1, strokeColor: markers.pickupStroke, strokeWeight: 1.5 },
+          icon: {
+            path: g.maps.SymbolPath.CIRCLE,
+            scale: 5,
+            fillColor: markers.pickupFill,
+            fillOpacity: 1,
+            strokeColor: markers.pickupStroke,
+            strokeWeight: 1.5,
+          },
         });
         new g.maps.Marker({
           position: to,
           map,
-          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: markers.dropFill, fillOpacity: 1, strokeColor: markers.dropStroke, strokeWeight: 1.5 },
+          icon: {
+            path: g.maps.SymbolPath.CIRCLE,
+            scale: 5,
+            fillColor: markers.dropFill,
+            fillOpacity: 1,
+            strokeColor: markers.dropStroke,
+            strokeWeight: 1.5,
+          },
         });
 
-        const cacheKey = `${from.lat},${from.lng}->${to.lat},${to.lng}`;
-        let encoded = cache.get(cacheKey);
-        if (!encoded) {
-          try {
-            const res = await computeRoute({ data: { origin: from, destination: to, travelMode: "TWO_WHEELER" } });
-            encoded = res.encodedPolyline;
-            if (encoded) cache.set(cacheKey, encoded);
-          } catch (e) {
-            console.warn("route preview failed", e);
-          }
-        }
+        const encoded = encodedPolyline;
 
         if (encoded && map && !cancelled) {
           const path = g.maps.geometry.encoding.decodePath(encoded);
@@ -99,10 +102,16 @@ export function RoutePreviewMap({ from, to, className }: Props) {
       poly?.setMap(null);
       map = null;
     };
-  }, [from.lat, from.lng, to.lat, to.lng, markers]);
+  }, [from.lat, from.lng, to.lat, to.lng, markers, encodedPolyline]);
 
   if (error) {
-    return <div className={`${className ?? ""} grid place-items-center bg-muted text-[10px] font-mono uppercase text-muted-foreground`}>Map unavailable</div>;
+    return (
+      <div
+        className={`${className ?? ""} grid place-items-center bg-muted text-[10px] font-mono uppercase text-muted-foreground`}
+      >
+        Map unavailable
+      </div>
+    );
   }
   return <div ref={containerRef} className={className ?? "h-32 w-full"} />;
 }

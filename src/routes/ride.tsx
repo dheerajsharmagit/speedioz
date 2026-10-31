@@ -1,32 +1,58 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadCustomerActiveRide, cancelRideConfirmed } from "@/lib/booking";
+import { RequireRole } from "@/components/rc/RequireRole";
+import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { API_BASE_URL, captainAvailabilityApi, captainMapApi, rideApi, storage, vehicleTypesApi, walletApi, type BookingDetails, type CanonicalRide, type VehicleTypeId } from "@/lib/api";
+import {
+  RequestError,
+  API_BASE_URL,
+  captainAvailabilityApi,
+  captainMapApi,
+  rideApi,
+  storage,
+  vehicleTypesApi,
+  walletApi,
+  type BookingDetails,
+  type CanonicalRide,
+  type VehicleTypeId,
+} from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
 import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus } from "@/lib/api";
-import { defaultPaymentMethod, needsOnlinePayment, secondsUntil, toServerPayment } from "@/lib/payments";
+import {
+  defaultPaymentMethod,
+  needsOnlinePayment,
+  secondsUntil,
+  toServerPayment,
+} from "@/lib/payments";
 
 export const Route = createFileRoute("/ride")({
   head: () => ({
     meta: [
       { title: "Book a ride — RIDEHER" },
-      { name: "description", content: "Bike, auto, and EV rides with community-verified smart routes." },
+      {
+        name: "description",
+        content: "Bike, auto, and EV rides with community-verified smart routes.",
+      },
     ],
   }),
-  component: RidePage,
+  component: () => (
+    <RequireRole role="CUSTOMER">
+      <RidePage />
+    </RequireRole>
+  ),
 });
 
 type Vehicle = { id: string; name: string; price: number; eta: string; note?: string };
 const vehicles: Vehicle[] = [
   { id: "bike", name: "Bike", price: 45, eta: "3 min" },
   { id: "auto", name: "Auto", price: 78, eta: "6 min" },
-  { id: "ev", name: "EV Bike", price: 52, eta: "4 min", note: "Green" },
   { id: "cab", name: "Cab", price: 120, eta: "8 min" },
 ];
 
@@ -43,7 +69,10 @@ type RouteStep = {
 const DEFAULT_PICKUP: Pickup = { label: "Locating you…", lat: 12.9718, lng: 77.6412 };
 
 function stripHtml(s: string): string {
-  return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  return s
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function maneuverGlyph(m: string): string {
@@ -103,13 +132,15 @@ function activeStepIndex(steps: RouteStep[], pos: { lat: number; lng: number }):
   let bestD = Infinity;
   for (let i = 0; i < steps.length; i++) {
     const d = haversineKm(pos, { lat: steps[i].endLat, lng: steps[i].endLng });
-    if (d < bestD) { bestD = d; best = i; }
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
   }
   // If we're already within 30m of this step's end, advance to the next.
   if (bestD * 1000 < 30 && best < steps.length - 1) return best + 1;
   return best;
 }
-
 
 type UiStep =
   | "destination"
@@ -128,37 +159,60 @@ type Payment = "wallet" | "upi" | "cash" | "card";
 
 function stepFromStatus(status: RideStatus): UiStep {
   switch (status) {
-    case "destination": return "destination";
-    case "vehicle": return "vehicle";
-    case "confirm": return "confirm";
-    case "searching": return "searching";
-    case "accepted": return "matched";
-    case "arriving": return "arriving";
-    case "in_progress": return "inprogress";
-    case "completed": return "completed";
-    case "rating": return "rating";
-    case "rated": return "rating";
-    case "cancelled": return "cancelled";
-    default: return "searching";
+    case "destination":
+      return "destination";
+    case "vehicle":
+      return "vehicle";
+    case "confirm":
+      return "confirm";
+    case "searching":
+      return "searching";
+    case "accepted":
+      return "matched";
+    case "arriving":
+      return "arriving";
+    case "in_progress":
+      return "inprogress";
+    case "completed":
+      return "completed";
+    case "rating":
+      return "rating";
+    case "rated":
+      return "rating";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "searching";
   }
 }
 
 function mapRideStatus(status: string | undefined): RideStatus {
   switch (status) {
-    case "SEARCHING": return "searching";
-    case "MATCHED": return "accepted";
-    case "ARRIVING": return "arriving";
-    case "IN_PROGRESS": return "in_progress";
-    case "COMPLETED": return "completed";
-    case "CANCELLED": return "cancelled";
-    default: return (status as RideStatus) || "searching";
+    case "SEARCHING":
+      return "searching";
+    case "MATCHED":
+      return "accepted";
+    case "ARRIVING":
+      return "arriving";
+    case "IN_PROGRESS":
+      return "in_progress";
+    case "COMPLETED":
+      return "completed";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      return (status as RideStatus) || "searching";
   }
 }
 
 function toClientRide(source: CanonicalRide | BookingDetails): Ride {
   const details = source as BookingDetails;
   const ride = source as CanonicalRide;
-  const pickup = details.pickup ?? { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress };
+  const pickup = details.pickup ?? {
+    lat: ride.pickupLat,
+    lng: ride.pickupLng,
+    address: ride.pickupAddress,
+  };
   const drop = details.drop ?? { lat: ride.dropLat, lng: ride.dropLng, address: ride.dropAddress };
   return {
     id: details.rideId ?? ride.id,
@@ -169,7 +223,10 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     drop_label: drop.address,
     drop_lat: drop.lat,
     drop_lng: drop.lng,
-    vehicle_type: (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab" ? "auto" : (details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev",
+    vehicle_type:
+      (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab"
+        ? "auto"
+        : ((details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev"),
     fare_inr: details.fareEstimate ?? ride.fareEstimate,
     status: mapRideStatus(details.status ?? ride.status),
     // Keep the OTP returned at booking time while the matched-details poll is
@@ -192,7 +249,9 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
@@ -206,8 +265,6 @@ function computeEtaMinutes(
   const minutes = Math.round((km / avgKmh) * 60);
   return Math.max(1, minutes);
 }
-
-
 
 function RidePage() {
   const navigate = useNavigate();
@@ -223,8 +280,66 @@ function RidePage() {
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("upi");
-  const [useSmartRoute, setUseSmartRoute] = useState(true);
+  const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
+  const [recovering, setRecovering] = useState(true);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const cancellationRef = useRef(false);
+  const recoveredRideRef = useRef(false);
+
+  useEffect(() => {
+    if (!storage.getAccessToken()) {
+      setRecovering(false);
+      return;
+    }
+    let disposed = false;
+    async function recover() {
+      try {
+        const recovered = await loadCustomerActiveRide();
+        if (!recovered) return;
+        const active = recovered.history;
+        const response = { data: recovered.details };
+        const restored = toClientRide(response.data);
+        if (disposed) return;
+        recoveredRideRef.current = true;
+        firstFixRef.current = true;
+        setLocating(false);
+        setRide(restored);
+        setPickup({
+          label: restored.pickup_label,
+          lat: restored.pickup_lat,
+          lng: restored.pickup_lng,
+        });
+        setDest({
+          name: restored.drop_label,
+          addr: restored.drop_label,
+          lat: restored.drop_lat,
+          lng: restored.drop_lng,
+        });
+        if (
+          ["UPI", "CARD"].includes(active.paymentMethod ?? "") &&
+          active.paymentStatus !== "PAID" &&
+          active.status === "SEARCHING"
+        ) {
+          setPayment(active.paymentMethod === "CARD" ? "card" : "upi");
+          awaitingPaymentRef.current = true;
+          setPaymentIntent(active.paymentIntents?.[0] ?? {});
+          setStep("payment");
+        } else setStep(stepFromStatus(restored.status));
+      } catch {
+        if (!disposed)
+          setBookingError(
+            "Could not check for an existing ride. Reload before booking to avoid duplicate trips.",
+          );
+      } finally {
+        if (!disposed) setRecovering(false);
+      }
+    }
+    void recover();
+    return () => {
+      disposed = true;
+    };
+  }, []);
   const [encodedPolyline, setEncodedPolyline] = useState<string>("");
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -239,11 +354,23 @@ function RidePage() {
   const approachFetchedRef = useRef<string | null>(null);
   const firstFixRef = useRef(false);
 
-  const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
-  const [fareQuotes, setFareQuotes] = useState<Partial<Record<"bike" | "auto" | "ev" | "cab", number>>>({});
-  const [vehicleAvailability, setVehicleAvailability] = useState<Partial<Record<"BIKE" | "AUTO" | "CAB", boolean>>>({});
+  const [routeInfo, setRouteInfo] = useState<{
+    distanceMeters: number;
+    durationSeconds: number;
+  } | null>(null);
+  const [quotePending, setQuotePending] = useState(false);
+  const [quoteError, setQuoteError] = useState(false);
+  const [quoteAttempt, setQuoteAttempt] = useState(0);
+  const [fareQuotes, setFareQuotes] = useState<
+    Partial<Record<"bike" | "auto" | "ev" | "cab", number>>
+  >({});
+  const [vehicleAvailability, setVehicleAvailability] = useState<
+    Partial<Record<"BIKE" | "AUTO" | "CAB", boolean>>
+  >({});
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [walletShortfall, setWalletShortfall] = useState<{ balance: number; fare: number } | null>(null);
+  const [walletShortfall, setWalletShortfall] = useState<{ balance: number; fare: number } | null>(
+    null,
+  );
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupBusy, setTopupBusy] = useState(false);
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
@@ -268,12 +395,16 @@ function RidePage() {
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(p);
+        if (recoveredRideRef.current) return;
         setPickup({ label: "Current location", ...p });
         setPickupConfirmed(true);
         firstFixRef.current = true;
         setLocating(false);
         reverseGeocode(p.lat, p.lng).then((addr) => {
-          if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+          if (addr)
+            setPickup((prev) =>
+              prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev,
+            );
         });
       },
       (err) => {
@@ -317,7 +448,10 @@ function RidePage() {
           firstFixRef.current = true;
           setLocating(false);
           reverseGeocode(p.lat, p.lng).then((addr) => {
-            if (addr) setPickup((prev) => (prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev));
+            if (addr)
+              setPickup((prev) =>
+                prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev,
+              );
           });
         }
       },
@@ -328,14 +462,18 @@ function RidePage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
     );
-    return () => { navigator.geolocation.clearWatch(watchId); };
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const vehicle = useMemo(() => vehicles.find((v) => v.id === selected)!, [selected]);
   const fare = fareQuotes[selected as "bike" | "auto" | "ev" | "cab"] ?? vehicle.price;
-  const smartSavings = 12;
-  useEffect(() => { stepRef.current = step; }, [step]);
+  const smartSavings = 0;
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
   // Wallet is the default method whenever its balance covers the fare.
   useEffect(() => {
     if (paymentPickedRef.current) return;
@@ -350,12 +488,14 @@ function RidePage() {
     const socket = io(API_BASE_URL.replace("/api/v1", ""), {
       auth: { token },
       transports: ["websocket", "polling"],
-      withCredentials: true
+      withCredentials: true,
     });
 
+    let disposed = false;
     const refreshBooking = async () => {
       try {
         const response = await rideApi.bookingDetails(ride.id);
+        if (disposed || cancellationRef.current) return;
         const updatedRide = toClientRide(response.data);
         // Some older API deployments omit the customer OTP from a later
         // booking-details response. Never let that refresh erase the OTP we
@@ -372,7 +512,8 @@ function RidePage() {
         // While the customer is paying, the ride stays on the payment screen.
         if (!(awaitingPaymentRef.current && next === "searching")) {
           const prev = stepRef.current;
-          if (next === "searching" && (prev === "matched" || prev === "arriving")) setRedispatching(true);
+          if (next === "searching" && (prev === "matched" || prev === "arriving"))
+            setRedispatching(true);
           if (next !== "searching") setRedispatching(false);
           setStep(next);
         }
@@ -382,36 +523,57 @@ function RidePage() {
       }
     };
 
-    socket.on("ride:matched", (data: {
-      rideId?: string;
-      otp?: string;
-      captain?: { name?: string; phone?: string | null; avatarUrl?: string | null; vehicleModel?: string; vehicleType?: string; vehicleNumber?: string; rating?: number };
-      captainLocation?: { lat: number; lng: number } | null;
-    }) => {
-      if (data.rideId !== ride.id) return;
-      setRide((current) => current ? {
-        ...current,
-        status: "accepted",
-        otp: data.otp ?? current.otp,
-        captain_name: data.captain?.name ?? current.captain_name,
-        captain_phone: data.captain?.phone ?? current.captain_phone,
-        captain_avatar: data.captain?.avatarUrl ?? current.captain_avatar,
-        captain_vehicle: data.captain?.vehicleModel ?? data.captain?.vehicleType ?? current.captain_vehicle,
-        captain_plate: data.captain?.vehicleNumber ?? current.captain_plate,
-        captain_rating: data.captain?.rating ?? current.captain_rating,
-        captain_lat: data.captainLocation?.lat ?? current.captain_lat,
-        captain_lng: data.captainLocation?.lng ?? current.captain_lng,
-      } : current);
-      if (data.captainLocation) setCaptainPos(data.captainLocation);
-      awaitingPaymentRef.current = false;
-      setRedispatching(false);
-      setStep("matched");
-      void refreshBooking();
-    });
+    socket.on(
+      "ride:matched",
+      (data: {
+        rideId?: string;
+        otp?: string;
+        captain?: {
+          name?: string;
+          phone?: string | null;
+          avatarUrl?: string | null;
+          vehicleModel?: string;
+          vehicleType?: string;
+          vehicleNumber?: string;
+          rating?: number;
+        };
+        captainLocation?: { lat: number; lng: number } | null;
+      }) => {
+        if (data.rideId !== ride.id) return;
+        setRide((current) =>
+          current
+            ? {
+                ...current,
+                status: "accepted",
+                otp: data.otp ?? current.otp,
+                captain_name: data.captain?.name ?? current.captain_name,
+                captain_phone: data.captain?.phone ?? current.captain_phone,
+                captain_avatar: data.captain?.avatarUrl ?? current.captain_avatar,
+                captain_vehicle:
+                  data.captain?.vehicleModel ??
+                  data.captain?.vehicleType ??
+                  current.captain_vehicle,
+                captain_plate: data.captain?.vehicleNumber ?? current.captain_plate,
+                captain_rating: data.captain?.rating ?? current.captain_rating,
+                captain_lat: data.captainLocation?.lat ?? current.captain_lat,
+                captain_lng: data.captainLocation?.lng ?? current.captain_lng,
+              }
+            : current,
+        );
+        if (data.captainLocation) setCaptainPos(data.captainLocation);
+        awaitingPaymentRef.current = false;
+        setRedispatching(false);
+        setStep("matched");
+        void refreshBooking();
+      },
+    );
     socket.on("captain:location", (data: { rideId?: string; lat?: number; lng?: number }) => {
-      if (data.rideId !== ride.id || typeof data.lat !== "number" || typeof data.lng !== "number") return;
+      if (data.rideId !== ride.id || typeof data.lat !== "number" || typeof data.lng !== "number")
+        return;
       setCaptainPos({ lat: data.lat, lng: data.lng });
-      setRide((current) => current ? { ...current, captain_lat: data.lat, captain_lng: data.lng } : current);
+      setRide((current) =>
+        current ? { ...current, captain_lat: data.lat, captain_lng: data.lng } : current,
+      );
     });
     socket.on("ride:searching", (data: { rideId?: string }) => {
       if (data?.rideId && data.rideId !== ride.id) return;
@@ -445,6 +607,7 @@ function RidePage() {
     const pollId = window.setInterval(() => void refreshBooking(), 5000);
 
     return () => {
+      disposed = true;
       socket.disconnect();
       window.clearInterval(pollId);
     };
@@ -479,7 +642,6 @@ function RidePage() {
     })();
   }, [ride?.id, ride?.status, captainPos]);
 
-
   // Compute polyline when destination is picked
   useEffect(() => {
     if (!dest) {
@@ -497,7 +659,7 @@ function RidePage() {
           data: {
             origin: { lat: pickup.lat, lng: pickup.lng },
             destination: { lat: dest.lat, lng: dest.lng },
-            travelMode: selected === "auto" ? "DRIVE" : "TWO_WHEELER",
+            travelMode: selected === "auto" || selected === "cab" ? "DRIVE" : "TWO_WHEELER",
           },
         });
         if (!cancelled) {
@@ -506,22 +668,30 @@ function RidePage() {
           }
           setEncodedPolyline(res.encodedPolyline || "");
           setRouteSteps(res.steps ?? []);
-          setRouteInfo({ distanceMeters: res.distanceMeters ?? 0, durationSeconds: res.durationSeconds ?? 0 });
+          setRouteInfo({
+            distanceMeters: res.distanceMeters ?? 0,
+            durationSeconds: res.durationSeconds ?? 0,
+          });
         }
       } catch (e) {
         if (!cancelled) {
           console.warn("route fetch failed", e);
           // Fallback to simple straight line if API fails
           setRouteError(null);
-          setEncodedPolyline(""); 
+          setEncodedPolyline("");
           setRouteSteps([]);
-          setRouteInfo({ distanceMeters: haversineKm(pickup, dest) * 1000, durationSeconds: (haversineKm(pickup, dest) / 25) * 3600 });
+          setRouteInfo({
+            distanceMeters: haversineKm(pickup, dest) * 1000,
+            durationSeconds: (haversineKm(pickup, dest) / 25) * 3600,
+          });
         }
       } finally {
         if (!cancelled) setRouteLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, selected]);
 
   // Quotes are calculated by the same backend route and fare services used
@@ -532,32 +702,54 @@ function RidePage() {
       return;
     }
     let cancelled = false;
-    rideApi.estimate({
-      pickup: { latitude: pickup.lat, longitude: pickup.lng },
-      destination: { latitude: dest.lat, longitude: dest.lng },
-    }).then((response) => {
-      if (cancelled) return;
-      const quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>> = {};
-      response.data.estimates.forEach((estimate) => {
-        if (estimate.vehicleType === "BIKE") { quotes.bike = estimate.max; quotes.ev = estimate.max; }
-        if (estimate.vehicleType === "AUTO") quotes.auto = estimate.max;
-        if (estimate.vehicleType === "CAB") quotes.cab = estimate.max;
+    setFareQuotes({});
+    setQuotePending(true);
+    setQuoteError(false);
+    rideApi
+      .estimate({
+        pickup: { latitude: pickup.lat, longitude: pickup.lng },
+        destination: { latitude: dest.lat, longitude: dest.lng },
+      })
+      .then((response) => {
+        if (cancelled) return;
+        const quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>> = {};
+        response.data.estimates.forEach((estimate) => {
+          if (estimate.vehicleType === "BIKE") {
+            quotes.bike = estimate.max;
+            quotes.ev = estimate.max;
+          }
+          if (estimate.vehicleType === "AUTO") quotes.auto = estimate.max;
+          if (estimate.vehicleType === "CAB") quotes.cab = estimate.max;
+        });
+        setFareQuotes(quotes);
+        setRouteInfo({
+          distanceMeters: response.data.distanceMeters,
+          durationSeconds: response.data.durationSeconds,
+        });
+        if (response.data.polyline) setEncodedPolyline(response.data.polyline);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFareQuotes({});
+          setQuoteError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuotePending(false);
       });
-      setFareQuotes(quotes);
-      setRouteInfo({ distanceMeters: response.data.distanceMeters, durationSeconds: response.data.durationSeconds });
-      if (response.data.polyline) setEncodedPolyline(response.data.polyline);
-    }).catch(() => {
-      if (!cancelled) setFareQuotes({});
-    });
-    return () => { cancelled = true; };
-  }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng]);
+    return () => {
+      cancelled = true;
+    };
+  }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, quoteAttempt]);
 
   useEffect(() => {
     if (!storage.getAccessToken()) return;
-    const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
-    const refreshAvailability = () => captainAvailabilityApi.get(vehicleType)
-      .then((response) => setActiveCaptains(response.data.activeCaptains))
-      .catch(() => setActiveCaptains(null));
+    const vehicleType = selected === "auto" ? "AUTO" : selected === "cab" ? "CAB" : "BIKE";
+    const refreshAvailability = () =>
+      captainAvailabilityApi
+        .get(vehicleType)
+        .then((response) => setActiveCaptains(response.data.activeCaptains))
+        .catch(() => setActiveCaptains(null));
     refreshAvailability();
     const interval = window.setInterval(refreshAvailability, 30000);
     return () => window.clearInterval(interval);
@@ -568,10 +760,17 @@ function RidePage() {
   useEffect(() => {
     if (!storage.getAccessToken()) return;
     let cancelled = false;
-    vehicleTypesApi.get()
-      .then((types) => { if (!cancelled) setVehicleAvailability(types); })
-      .catch(() => { if (!cancelled) setVehicleAvailability({}); });
-    return () => { cancelled = true; };
+    vehicleTypesApi
+      .get()
+      .then((types) => {
+        if (!cancelled) setVehicleAvailability(types);
+      })
+      .catch(() => {
+        if (!cancelled) setVehicleAvailability({});
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Wallet balance is checked before booking so a low balance shows a friendly
@@ -580,30 +779,46 @@ function RidePage() {
     if (step !== "confirm" || !storage.getAccessToken()) return;
     let cancelled = false;
     setWalletShortfall(null);
-    walletApi.get()
+    walletApi
+      .get()
       .then((wallet) => {
         if (cancelled) return;
         setWalletBalance(wallet.balance);
         if (wallet.balance >= fare) setWalletShortfall(null);
       })
-      .catch(() => { if (!cancelled) setWalletBalance(null); });
-    return () => { cancelled = true; };
+      .catch(() => {
+        if (!cancelled) setWalletBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, fare]);
 
   useEffect(() => {
     if (!storage.getAccessToken()) return;
-    const vehicleType = selected === "auto" ? "AUTO" : "BIKE";
-    const refreshMapCaptains = () => captainMapApi.get(pickup.lat, pickup.lng, vehicleType)
-      .then((response) => setNearbyCaptains(response.data.captains))
-      .catch(() => setNearbyCaptains([]));
+    const vehicleType = selected === "auto" ? "AUTO" : selected === "cab" ? "CAB" : "BIKE";
+    const refreshMapCaptains = () =>
+      captainMapApi
+        .get(pickup.lat, pickup.lng, vehicleType)
+        .then((response) => setNearbyCaptains(response.data.captains))
+        .catch(() => setNearbyCaptains([]));
     refreshMapCaptains();
     const interval = window.setInterval(refreshMapCaptains, 30000);
     return () => window.clearInterval(interval);
   }, [pickup.lat, pickup.lng, selected]);
 
   async function createRide() {
-    if (!dest) return;
+    if (
+      !dest ||
+      recovering ||
+      bookingError ||
+      creating ||
+      quotePending ||
+      quoteError ||
+      fareQuotes[selected as keyof typeof fareQuotes] == null
+    )
+      return;
     if (!storage.getAccessToken()) {
       navigate({ to: "/auth", search: { mode: "signin" } });
       return;
@@ -623,60 +838,59 @@ function RidePage() {
     if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     setCreating(true);
     try {
-      const response = await rideApi.create({
-        pickupAddress: pickup.label,
-        pickupLat: pickup.lat,
-        pickupLng: pickup.lng,
-        dropAddress: dest.addr,
-        dropLat: dest.lat,
-        dropLng: dest.lng,
-        // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
-        vehicleType: (selected === "ev" ? "BIKE" : selected.toUpperCase()) as "BIKE" | "AUTO" | "CAB",
-        paymentMethod: toServerPayment(payment),
-      }, idemKeyRef.current);
+      const response = await rideApi.create(
+        {
+          pickupAddress: pickup.label,
+          pickupLat: pickup.lat,
+          pickupLng: pickup.lng,
+          dropAddress: dest.addr,
+          dropLat: dest.lat,
+          dropLng: dest.lng,
+          // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
+          vehicleType: (selected === "ev" ? "BIKE" : selected.toUpperCase()) as
+            "BIKE" | "AUTO" | "CAB",
+          paymentMethod: toServerPayment(payment),
+        },
+        idemKeyRef.current,
+      );
       const created = parseCreateRide(response);
       setRide(toClientRide(created.ride));
       idemKeyRef.current = null;
-      if (needsOnlinePayment(payment) && created.paymentIntent) {
+      if (needsOnlinePayment(payment)) {
         awaitingPaymentRef.current = true;
-        setPaymentIntent(created.paymentIntent);
+        setPaymentIntent(created.paymentIntent ?? {});
         setStep("payment");
       } else {
         setStep("searching");
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      const code = e?.error?.code;
+      const apiError = e instanceof RequestError ? e.error : undefined;
+      const code = apiError?.code;
       // The server can still reject the booking for a low wallet — show the
       // same friendly top-up prompt instead of the raw error string.
-      const errText = `${code ?? ""} ${e?.error?.message ?? ""}`.toLowerCase();
-      if ((errText.includes("wallet") && errText.includes("balance")) || errText.includes("insufficient")) {
+      const errText = `${code ?? ""} ${apiError?.message ?? ""}`.toLowerCase();
+      if (
+        (errText.includes("wallet") && errText.includes("balance")) ||
+        errText.includes("insufficient")
+      ) {
         setWalletShortfall({ balance: walletBalance ?? 0, fare });
         return;
       }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
-          : e?.error?.message || "Couldn't create ride. Try again.";
+          : apiError?.message || "Couldn't create ride. Try again.";
       alert(msg);
     } finally {
       setCreating(false);
     }
   }
 
-  async function handleTopup(amount: number) {
-    setTopupBusy(true);
-    try {
-      const result = await walletApi.topup(amount);
-      if (typeof result.balance === "number") setWalletBalance(result.balance);
-      setWalletShortfall(null);
-      setTopupOpen(false);
-    } catch (e) {
-      console.error(e);
-      alert("Couldn't add money to your wallet right now. Please try again.");
-    } finally {
-      setTopupBusy(false);
-    }
+  async function handleTopup(_amount: number) {
+    alert(
+      "Wallet top-up is unavailable until secure payment checkout is connected. Please choose another payment method.",
+    );
   }
 
   function onPaid() {
@@ -685,38 +899,50 @@ function RidePage() {
     setStep("searching");
   }
 
-  async function switchPaymentMethod() {
-    // Expired/abandoned payment: cancel this booking and let the rider pick again.
-    if (ride) await rideApi.cancel(ride.id, "Payment expired — switching method").catch(() => {});
+  async function confirmCancellation(reason: string): Promise<boolean> {
+    if (cancellationRef.current) return false;
+    cancellationRef.current = true;
+    try {
+      if (ride) await cancelRideConfirmed(ride.id, reason);
+      return true;
+    } catch {
+      alert("Cancellation was not confirmed. Your ride is still shown. Please try again.");
+      return false;
+    } finally {
+      cancellationRef.current = false;
+    }
+  }
+
+  function clearPendingRide() {
     awaitingPaymentRef.current = false;
     setPaymentIntent(null);
     setRide(null);
+    idemKeyRef.current = null;
+  }
+
+  async function switchPaymentMethod() {
+    if (!(await confirmCancellation("Switching payment method"))) return;
+    clearPendingRide();
     paymentPickedRef.current = false;
     setStep("confirm");
   }
 
   async function retryPayment() {
-    if (ride) await rideApi.cancel(ride.id, "Payment expired — retrying").catch(() => {});
-    awaitingPaymentRef.current = false;
-    setPaymentIntent(null);
-    setRide(null);
+    if (!(await confirmCancellation("Retrying payment"))) return;
+    clearPendingRide();
     await createRide();
   }
 
   async function cancelDuringPayment() {
-    if (ride) await rideApi.cancel(ride.id, "Cancelled during payment").catch(() => {});
-    awaitingPaymentRef.current = false;
-    setPaymentIntent(null);
-    setRide(null);
+    if (!(await confirmCancellation("Cancelled during payment"))) return;
+    clearPendingRide();
     setStep("destination");
   }
 
   async function cancelSearch() {
-    if (ride) {
-      await rideApi.cancel(ride.id, "Cancelled by customer").catch(() => {});
-    }
+    if (!(await confirmCancellation("Cancelled by customer"))) return;
+    clearPendingRide();
     setRedispatching(false);
-    setRide(null);
     setEncodedPolyline("");
     setRouteSteps([]);
     setApproachPolyline("");
@@ -728,9 +954,14 @@ function RidePage() {
   async function submitRating() {
     if (!ride) return;
     try {
-      await rideApi.rate(ride.id, { stars: rating, tip: tip || undefined, comment: rateComment.trim() || undefined });
+      await rideApi.rate(ride.id, {
+        stars: rating,
+        tip: tip || undefined,
+        comment: rateComment.trim() || undefined,
+      });
     } catch (e) {
-      console.warn("Rating failed", e);
+      alert("Your rating could not be saved. Please try again.");
+      return;
     }
     setRateComment("");
     // reset
@@ -749,20 +980,21 @@ function RidePage() {
   }
 
   const mapPickup = { lat: pickup.lat, lng: pickup.lng };
-  const mapDrop = dest ? { lat: dest.lat, lng: dest.lng } : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 };
+  const mapDrop = dest
+    ? { lat: dest.lat, lng: dest.lng }
+    : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 };
 
   // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
   const activePolyline =
-    (step === "matched" || step === "arriving") && approachPolyline ? approachPolyline : encodedPolyline;
+    (step === "matched" || step === "arriving") && approachPolyline
+      ? approachPolyline
+      : encodedPolyline;
 
   // Live ETA (in minutes) — haversine distance / assumed average speed.
   const etaTarget =
-    step === "matched" || step === "arriving"
-      ? mapPickup
-      : step === "inprogress"
-        ? mapDrop
-        : null;
-  const etaMinutes = captainPos && etaTarget ? computeEtaMinutes(captainPos, etaTarget, selected) : null;
+    step === "matched" || step === "arriving" ? mapPickup : step === "inprogress" ? mapDrop : null;
+  const etaMinutes =
+    captainPos && etaTarget ? computeEtaMinutes(captainPos, etaTarget, selected) : null;
   const etaLabel =
     step === "matched" || step === "arriving"
       ? "Captain arriving in"
@@ -774,10 +1006,14 @@ function RidePage() {
   const showTurnByTurn = step === "inprogress" && routeSteps.length > 0 && captainPos !== null;
   const activeStepIdx = showTurnByTurn ? activeStepIndex(routeSteps, captainPos!) : -1;
   const currentStep = activeStepIdx >= 0 ? routeSteps[activeStepIdx] : null;
-  const nextStep = activeStepIdx >= 0 && activeStepIdx + 1 < routeSteps.length ? routeSteps[activeStepIdx + 1] : null;
-  const distanceToTurn = currentStep && captainPos
-    ? haversineKm(captainPos, { lat: currentStep.endLat, lng: currentStep.endLng }) * 1000
-    : 0;
+  const nextStep =
+    activeStepIdx >= 0 && activeStepIdx + 1 < routeSteps.length
+      ? routeSteps[activeStepIdx + 1]
+      : null;
+  const distanceToTurn =
+    currentStep && captainPos
+      ? haversineKm(captainPos, { lat: currentStep.endLat, lng: currentStep.endLng }) * 1000
+      : 0;
 
   // Overall trip progress (0..1) — how far captain has gone along main route.
   const tripProgress = (() => {
@@ -805,39 +1041,37 @@ function RidePage() {
     return null;
   })();
 
-
+  if (recovering || bookingError)
+    return (
+      <div className="min-h-screen bg-background p-8 text-center">
+        <p role="status">{bookingError ?? "Checking for an existing ride…"}</p>
+        {bookingError && (
+          <button className="mt-4 underline" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        )}
+        <RoleNav />
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <RoleNav />
       <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
-          <div className="hidden">'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
-                                        
-                                            
-                                            Implement the customer booking flow in the existing codebase. Do not add text/documentation or mock UI.
-
-API integration:
-
-POST /api/v1/rides/request — create ride request with pickup/drop coordinates, addresses, vehicle type and payment method.
-
-GET /api/v1/rides/:id/booking-details — fetch booking details.
-
-Customer UI:
-
- Show pickup and drop locations.
-
- Show assigned captain profile, phone and vehicle details.
-
- Show fare and distance.
-
- Show captain's live location on the map.
-
- Show booking/confirmation status.
-
- Update the screen using real API data.
-
-Handle loading, errors, authentication and booking status changes. Use the existing project components and API architecture. Actually modify and connect the code; do not create placeholder/mock functionality.</div>
+          <div className="hidden">
+            '''Do not make any visual modifications. The phrases I write are commands to understand
+            what I want, not to be written down. Understand their content well, then execute what is
+            required.''' Implement the customer booking flow in the existing codebase. Do not add
+            text/documentation or mock UI. API integration: POST /api/v1/rides/request — create ride
+            request with pickup/drop coordinates, addresses, vehicle type and payment method. GET
+            /api/v1/rides/:id/booking-details — fetch booking details. Customer UI: Show pickup and
+            drop locations. Show assigned captain profile, phone and vehicle details. Show fare and
+            distance. Show captain's live location on the map. Show booking/confirmation status.
+            Update the screen using real API data. Handle loading, errors, authentication and
+            booking status changes. Use the existing project components and API architecture.
+            Actually modify and connect the code; do not create placeholder/mock functionality.
+          </div>
           {step === "destination" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
@@ -878,8 +1112,12 @@ Handle loading, errors, authentication and booking status changes. Use the exist
 
           {activeCaptains !== null && (
             <div className="absolute left-4 top-24 flex items-center gap-2 rounded-full bg-card/95 px-3 py-2 text-xs font-bold text-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
-              <span aria-hidden="true" className="text-base">🛵</span>
-              <span>{activeCaptains} active captain{activeCaptains === 1 ? "" : "s"} nearby</span>
+              <span aria-hidden="true" className="text-base">
+                🛵
+              </span>
+              <span>
+                {activeCaptains} active captain{activeCaptains === 1 ? "" : "s"} nearby
+              </span>
             </div>
           )}
 
@@ -896,7 +1134,15 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             aria-label="Recenter map on my location"
             className="absolute right-4 top-24 grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="12" cy="12" r="3" />
               <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
             </svg>
@@ -906,7 +1152,11 @@ Handle loading, errors, authentication and booking status changes. Use the exist
           {geoError && (
             <div className="absolute inset-x-4 top-4 flex items-center gap-2 rounded-full bg-secondary/95 px-3 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
               <span className="text-xs font-semibold truncate">
-                {geoError === "denied" ? "Location off — set pickup manually" : geoError === "timeout" ? "Location timed out" : "Location unavailable"}
+                {geoError === "denied"
+                  ? "Location off — set pickup manually"
+                  : geoError === "timeout"
+                    ? "Location timed out"
+                    : "Location unavailable"}
               </span>
               <button
                 onClick={requestGeolocation}
@@ -924,10 +1174,6 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             </div>
           )}
 
-
-
-
-
           <div className="pointer-events-none absolute left-6 right-6 top-6">
             {showTurnByTurn && currentStep ? (
               <div className="rounded-2xl bg-secondary/95 p-4 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
@@ -939,7 +1185,9 @@ Handle loading, errors, authentication and booking status changes. Use the exist
                     <p className="font-mono text-[9px] uppercase tracking-widest opacity-60">
                       In {formatMeters(distanceToTurn)}
                     </p>
-                    <p className="mt-0.5 truncate text-sm font-bold">{stripHtml(currentStep.instruction) || "Continue"}</p>
+                    <p className="mt-0.5 truncate text-sm font-bold">
+                      {stripHtml(currentStep.instruction) || "Continue"}
+                    </p>
                   </div>
                 </div>
                 {nextStep && (
@@ -957,7 +1205,9 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             ) : (
               <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
                 <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-                <p className="mt-1 text-xs font-semibold">{locating ? "Locating you…" : pickup.label}</p>
+                <p className="mt-1 text-xs font-semibold">
+                  {locating ? "Locating you…" : pickup.label}
+                </p>
                 {dest && (
                   <>
                     <div className="my-2 h-px bg-border" />
@@ -985,12 +1235,13 @@ Handle loading, errors, authentication and booking status changes. Use the exist
             )}
           </div>
 
-
           {etaLabel && etaMinutes !== null && (
             <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
               <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/5">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{etaLabel}</span>
+                <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
+                  {etaLabel}
+                </span>
                 <span className="text-sm font-extrabold">{etaMinutes} min</span>
                 {distanceRemainingM !== null && (
                   <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
@@ -1000,7 +1251,7 @@ Handle loading, errors, authentication and booking status changes. Use the exist
               </div>
             </div>
           )}
-      </div>
+        </div>
 
         {/* '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
@@ -1011,145 +1262,59 @@ Handle loading, errors, authentication and booking status changes. Use the exist
 
         {/* Bottom sheet */}
         <div style={{ display: "none" }} aria-hidden="true">
-          '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
-                                        
-                                            
-                                            Fix the Google Places locationBias error in the RideHer frontend without changing any existing UI, booking flow, backend APIs, authentication, or ride logic.
-
-The browser console currently shows:
-
-Google Places unavailable, falling back to OSM
-InvalidValueError: in property locationBias:
-Invalid LocationBias:
-{"{"}
-  "center": {"{"}
-    "lat": 28.635097469507716,
-    "lng": 77.4041429713446
-  {"}"},
-  "radius": 30000
-{"}"}
-
-Required fix
-
-Find the Google Places Autocomplete/location-search implementation in the frontend that creates the invalid locationBias object.
-
-The current implementation is using:
-
-locationBias: {"{"}
-  center: {"{"}
-    lat: currentLat,
-    lng: currentLng
-  {"}"},
-  radius: 30000
-{"}"}
-
-Replace it with the correct Google Places structure:
-
-locationBias: {"{"}
-  circle: {"{"}
-    center: {"{"}
-      latitude: currentLat,
-      longitude: currentLng
-    {"}"},
-    radius: 30000
-  {"}"}
-{"}"}
-
-Dynamic location
-
-Do not use hard-coded coordinates.
-
-The currentLat and currentLng values must come from the user's current GPS location.
-
-Validate them before creating locationBias:
-
-Number.isFinite(currentLat) &&
-Number.isFinite(currentLng)
-
-If the user's location is not available or the coordinates are invalid, do not send locationBias at all. The Places search should continue without a location bias.
-
-Important requirements
-
- Keep Google Places as the primary location search provider.
-
- Do not replace Google Places with OSM.
-
- Do not remove the existing Google Maps integration.
-
- Do not modify the Google API key.
-
- Do not change the existing RideHer UI or design.
-
- Do not change pickup/drop location fields.
-
- Do not change the ride request API.
-
- Do not change /api/v1/rides/request.
-
- Do not change customer/captain booking logic.
-
- Keep current-location detection working.
-
- Search the entire frontend codebase for the old locationBias format and fix the relevant Google Places implementation.
-
- Make sure the implementation matches the Google Places API/library currently installed in this project rather than introducing a different Places API implementation.
-
- Do not blindly change unrelated map configuration.
-
- Preserve the existing fallback behavior only for genuine Google Places loading/API failures.
-
-Also check for this
-
-Inspect the existing Google Places initialization and confirm that the API libraries required for the autocomplete functionality are correctly loaded.
-
-Do not add duplicate Google Maps script loading if one already exists.
-
-Expected behavior
-
-After the fix:
-
-User opens Ride page
-       ↓
-Browser gets current GPS location
-       ↓
-Google Places Autocomplete loads
-       ↓
-locationBias uses:
-circle.center.latitude
-circle.center.longitude
-circle.radius
-       ↓
-User searches pickup/drop location
-       ↓
-Google Places suggestions appear
-       ↓
-No InvalidValueError
-
-Verification
-
-After implementing the fix:
-
- Run the frontend build.
-
- Confirm there are no TypeScript/JavaScript errors.
-
- Search the compiled/source code to ensure the old invalid structure is no longer being used.
-
- Test the /ride page.
-
- Test pickup location search.
-
- Test drop location search.
-
- Test with GPS permission enabled.
-
- Test when GPS permission is denied.
-
- Confirm the console no longer shows:
-
-InvalidValueError: Invalid LocationBias
-
-Make only the changes necessary to fix this Google Places error. Do not redesign or refactor unrelated parts of the application.
+          '''Do not make any visual modifications. The phrases I write are commands to understand
+          what I want, not to be written down. Understand their content well, then execute what is
+          required.''' Fix the Google Places locationBias error in the RideHer frontend without
+          changing any existing UI, booking flow, backend APIs, authentication, or ride logic. The
+          browser console currently shows: Google Places unavailable, falling back to OSM
+          InvalidValueError: in property locationBias: Invalid LocationBias:
+          {"{"}
+          "center": {"{"}
+          "lat": 28.635097469507716, "lng": 77.4041429713446
+          {"}"}, "radius": 30000
+          {"}"}
+          Required fix Find the Google Places Autocomplete/location-search implementation in the
+          frontend that creates the invalid locationBias object. The current implementation is
+          using: locationBias: {"{"}
+          center: {"{"}
+          lat: currentLat, lng: currentLng
+          {"}"}, radius: 30000
+          {"}"}
+          Replace it with the correct Google Places structure: locationBias: {"{"}
+          circle: {"{"}
+          center: {"{"}
+          latitude: currentLat, longitude: currentLng
+          {"}"}, radius: 30000
+          {"}"}
+          {"}"}
+          Dynamic location Do not use hard-coded coordinates. The currentLat and currentLng values
+          must come from the user's current GPS location. Validate them before creating
+          locationBias: Number.isFinite(currentLat) && Number.isFinite(currentLng) If the user's
+          location is not available or the coordinates are invalid, do not send locationBias at all.
+          The Places search should continue without a location bias. Important requirements Keep
+          Google Places as the primary location search provider. Do not replace Google Places with
+          OSM. Do not remove the existing Google Maps integration. Do not modify the Google API key.
+          Do not change the existing RideHer UI or design. Do not change pickup/drop location
+          fields. Do not change the ride request API. Do not change /api/v1/rides/request. Do not
+          change customer/captain booking logic. Keep current-location detection working. Search the
+          entire frontend codebase for the old locationBias format and fix the relevant Google
+          Places implementation. Make sure the implementation matches the Google Places API/library
+          currently installed in this project rather than introducing a different Places API
+          implementation. Do not blindly change unrelated map configuration. Preserve the existing
+          fallback behavior only for genuine Google Places loading/API failures. Also check for this
+          Inspect the existing Google Places initialization and confirm that the API libraries
+          required for the autocomplete functionality are correctly loaded. Do not add duplicate
+          Google Maps script loading if one already exists. Expected behavior After the fix: User
+          opens Ride page ↓ Browser gets current GPS location ↓ Google Places Autocomplete loads ↓
+          locationBias uses: circle.center.latitude circle.center.longitude circle.radius ↓ User
+          searches pickup/drop location ↓ Google Places suggestions appear ↓ No InvalidValueError
+          Verification After implementing the fix: Run the frontend build. Confirm there are no
+          TypeScript/JavaScript errors. Search the compiled/source code to ensure the old invalid
+          structure is no longer being used. Test the /ride page. Test pickup location search. Test
+          drop location search. Test with GPS permission enabled. Test when GPS permission is
+          denied. Confirm the console no longer shows: InvalidValueError: Invalid LocationBias Make
+          only the changes necessary to fix this Google Places error. Do not redesign or refactor
+          unrelated parts of the application.
         </div>
 
         <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
@@ -1158,10 +1323,14 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
           {step === "destination" && (
             <DestinationStep
               pickup={pickup}
-              setPickup={(p) => { setPickup(p); setPickupQuery(p.label); setPickupConfirmed(true); }}
+              setPickup={(p) => {
+                setPickup(p);
+                setPickupQuery(p.label);
+                setPickupConfirmed(true);
+              }}
               pickupQuery={pickupQuery}
               setPickupQuery={setPickupQuery}
-              useCurrentLocation={() => {
+              onUseCurrentLocation={() => {
                 if (typeof navigator === "undefined" || !navigator.geolocation) return;
                 setLocating(true);
                 navigator.geolocation.getCurrentPosition(
@@ -1173,7 +1342,10 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
                     setPickupConfirmed(true);
                     setLocating(false);
                     reverseGeocode(lat, lng).then((addr) => {
-                      if (addr) setPickup((prev) => (prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev));
+                      if (addr)
+                        setPickup((prev) =>
+                          prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev,
+                        );
                     });
                   },
                   () => setLocating(false),
@@ -1189,9 +1361,21 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               onNext={() => dest && setStep("vehicle")}
               routeInfo={routeInfo}
             />
-
           )}
 
+          {(step === "vehicle" || step === "confirm") && (quotePending || quoteError) && (
+            <div className="mx-6 mb-4 rounded border p-3 text-sm" role="status">
+              {quotePending ? "Updating fare estimates…" : "Fare estimates are unavailable."}
+              {quoteError && (
+                <button
+                  className="ml-2 underline"
+                  onClick={() => setQuoteAttempt(quoteAttempt + 1)}
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
           {step === "vehicle" && (
             <VehicleStep
               selected={selected}
@@ -1211,17 +1395,27 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               useSmartRoute={useSmartRoute}
               smartSavings={smartSavings}
               payment={payment}
-              setPayment={(p) => { paymentPickedRef.current = true; setPayment(p); setWalletShortfall(null); }}
+              setPayment={(p) => {
+                paymentPickedRef.current = true;
+                setPayment(p);
+                setWalletShortfall(null);
+              }}
               walletBalance={walletBalance}
               onNext={createRide}
-              busy={creating}
+              busy={
+                creating ||
+                recovering ||
+                !!bookingError ||
+                quotePending ||
+                quoteError ||
+                fareQuotes[selected as keyof typeof fareQuotes] == null
+              }
               walletShortfall={walletShortfall}
               onAddMoney={() => setTopupOpen(true)}
               routeInfo={routeInfo}
               pickupLabel={pickup.label}
               dropLabel={dest?.addr ?? ""}
             />
-
           )}
 
           {step === "payment" && ride && paymentIntent && (
@@ -1237,9 +1431,16 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
             />
           )}
 
-          {step === "searching" && <SearchingStep onCancel={cancelSearch} redispatching={redispatching} />}
+          {step === "searching" && (
+            <SearchingStep onCancel={cancelSearch} redispatching={redispatching} />
+          )}
 
-          {step === "matched" && ride && <MatchedStep ride={ride} />}
+          {step === "matched" && ride && (
+            <>
+              <MatchedStep ride={ride} />
+              <RideSafety ride={ride} />
+            </>
+          )}
 
           {step === "arriving" && ride && (
             <RideStatusStep
@@ -1258,9 +1459,7 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               title="On the way"
               subtitle={`${etaMinutes ?? "—"} min · ${
                 distanceRemainingM !== null ? formatMeters(distanceRemainingM) : "—"
-              } to drop · ${Math.round(tripProgress * 100)}% complete${
-                useSmartRoute ? " · saving 12 min" : ""
-              }`}
+              } to drop · ${Math.round(tripProgress * 100)}% complete${""}`}
               ride={ride}
               onNext={() => {}}
               ctaLabel="Live tracking"
@@ -1276,7 +1475,10 @@ Make only the changes necessary to fix this Google Places error. Do not redesign
               <h2 className="text-2xl font-extrabold tracking-tight">Ride Cancelled</h2>
               <p className="mt-2 text-sm text-muted-foreground">The ride has been cancelled.</p>
               <button
-                onClick={() => { setRide(null); setStep("destination"); }}
+                onClick={() => {
+                  setRide(null);
+                  setStep("destination");
+                }}
                 className="mt-6 h-14 w-full rounded-full bg-primary text-sm font-bold text-secondary shadow-xl transition-transform active:scale-95"
               >
                 Back to booking
@@ -1339,7 +1541,7 @@ function DestinationStep({
   setPickup,
   pickupQuery,
   setPickupQuery,
-  useCurrentLocation,
+  onUseCurrentLocation,
   locating,
   pickupConfirmed,
   dest,
@@ -1353,7 +1555,7 @@ function DestinationStep({
   setPickup: (p: Pickup) => void;
   pickupQuery: string;
   setPickupQuery: (v: string) => void;
-  useCurrentLocation: () => void;
+  onUseCurrentLocation: () => void;
   locating: boolean;
   pickupConfirmed: boolean;
   dest: PlaceResult | null;
@@ -1399,7 +1601,10 @@ function DestinationStep({
               bias={{ lat: pickup.lat, lng: pickup.lng }}
             />
             <button
-              onClick={() => { useCurrentLocation(); setEditPickup(false); }}
+              onClick={() => {
+                onUseCurrentLocation();
+                setEditPickup(false);
+              }}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background text-xs font-bold"
             >
               <span className="h-2 w-2 rounded-full bg-primary" /> Use current location
@@ -1431,17 +1636,27 @@ function DestinationStep({
         <div className="mb-4 px-6">
           <div className="flex items-stretch gap-2 rounded-2xl border border-border bg-muted/40 p-3">
             <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Distance</p>
-              <p className="mt-1 text-base font-extrabold">{formatMeters(routeInfo.distanceMeters)}</p>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Distance
+              </p>
+              <p className="mt-1 text-base font-extrabold">
+                {formatMeters(routeInfo.distanceMeters)}
+              </p>
             </div>
             <div className="w-px bg-border" />
             <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Est. time</p>
-              <p className="mt-1 text-base font-extrabold">{formatDuration(routeInfo.durationSeconds)}</p>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Est. time
+              </p>
+              <p className="mt-1 text-base font-extrabold">
+                {formatDuration(routeInfo.durationSeconds)}
+              </p>
             </div>
             <div className="w-px bg-border" />
             <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Route</p>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Route
+              </p>
               <p className="mt-1 text-[11px] font-bold">Fastest path</p>
             </div>
           </div>
@@ -1461,10 +1676,15 @@ function DestinationStep({
   );
 }
 
-
 /* ---------- Vehicle ---------- */
 function VehicleStep({
-  selected, setSelected, useSmartRoute, setUseSmartRoute, quotes, availability, onNext,
+  selected,
+  setSelected,
+  useSmartRoute,
+  setUseSmartRoute,
+  quotes,
+  availability,
+  onNext,
 }: {
   selected: string;
   setSelected: (v: string) => void;
@@ -1478,80 +1698,68 @@ function VehicleStep({
     <>
       <div className="mb-4 px-6">
         <h2 className="text-2xl font-extrabold tracking-tight">Pick your ride</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Fares include Smart Route savings.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Fares are estimated by the booking service.
+        </p>
       </div>
 
       <div className="mb-6 flex gap-3 overflow-x-auto px-6 scrollbar-hide">
         {vehicles.map((v) => {
           const active = v.id === selected;
           // EV bikes book as BIKE on the backend, so availability follows BIKE.
-          const availabilityKey: VehicleTypeId = v.id === "auto" ? "AUTO" : v.id === "cab" ? "CAB" : "BIKE";
-          const unavailable = availability[availabilityKey] === false;
+          const availabilityKey: VehicleTypeId =
+            v.id === "auto" ? "AUTO" : v.id === "cab" ? "CAB" : "BIKE";
+          const unavailable =
+            availability[availabilityKey] === false || quotes[v.id as keyof typeof quotes] == null;
           return (
             <button
               key={v.id}
-              onClick={() => { if (!unavailable) setSelected(v.id); }}
+              onClick={() => {
+                if (!unavailable) setSelected(v.id);
+              }}
               disabled={unavailable}
               aria-disabled={unavailable}
               className={`w-32 flex-none rounded-2xl p-4 text-left ring-1 transition ${
                 unavailable
                   ? "cursor-not-allowed bg-muted opacity-50 ring-border"
-                  : active ? "bg-primary ring-black/5" : "bg-card ring-border hover:ring-foreground/20"
+                  : active
+                    ? "bg-primary ring-black/5"
+                    : "bg-card ring-border hover:ring-foreground/20"
               }`}
             >
               <p className="font-mono text-[10px] font-bold uppercase">
                 {v.name}
                 {v.note ? <span className="ml-1 text-accent">·{v.note}</span> : null}
               </p>
-              <p className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}>
+              <p
+                className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}
+              >
                 {unavailable
                   ? "—"
                   : quotes[v.id as "bike" | "auto" | "ev" | "cab"]
                     ? `₹${quotes[v.id as "bike" | "auto" | "ev" | "cab"]}`
                     : "Get quote"}
               </p>
-              <p className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}>
-                {unavailable ? "Not available" : `${v.eta.toUpperCase()} ETA`}
+              <p
+                className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}
+              >
+                {unavailable ? "Not available" : "Pickup time after matching"}
               </p>
             </button>
           );
         })}
       </div>
 
-      <div className="mb-6 px-6">
-        <button
-          onClick={() => setUseSmartRoute(!useSmartRoute)}
-          className={`relative w-full overflow-hidden rounded-3xl p-6 text-left transition ${
-            useSmartRoute ? "bg-secondary text-secondary-foreground" : "bg-muted"
-          }`}
-        >
-          <div className="mb-4 flex items-start justify-between">
-            <div>
-              <span className={`mb-2 inline-block rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider ${
-                useSmartRoute ? "bg-accent/20 text-accent" : "bg-background text-muted-foreground"
-              }`}>
-                Community Route
-              </span>
-              <h3 className="text-xl font-bold leading-tight">Save 12 min</h3>
-              <p className={`mt-1 text-xs ${useSmartRoute ? "text-secondary-foreground/60" : "text-muted-foreground"}`}>
-                Verified by 47 captains this week
-              </p>
-            </div>
-            <div className={`grid h-6 w-10 place-items-center rounded-full transition ${
-              useSmartRoute ? "bg-accent" : "bg-background"
-            }`}>
-              <div className={`h-4 w-4 rounded-full bg-background transition-transform ${
-                useSmartRoute ? "translate-x-2" : "-translate-x-2"
-              }`} />
-            </div>
-          </div>
-        </button>
+      <div className="mb-6 rounded-2xl bg-muted mx-6 p-4 text-sm">
+        Community route selection is unavailable for booking. Your ride uses the standard road
+        route.
       </div>
 
       <div className="px-6 pb-12">
         <button
           onClick={onNext}
-          className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95"
+          disabled={quotes[selected as keyof typeof quotes] == null}
+          className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-50"
         >
           Review ride
         </button>
@@ -1562,7 +1770,20 @@ function VehicleStep({
 
 /* ---------- Confirm ---------- */
 function ConfirmStep({
-  vehicle, fare, useSmartRoute, smartSavings, payment, setPayment, onNext, busy, routeInfo, pickupLabel, dropLabel, walletShortfall, onAddMoney, walletBalance,
+  vehicle,
+  fare,
+  useSmartRoute,
+  smartSavings,
+  payment,
+  setPayment,
+  onNext,
+  busy,
+  routeInfo,
+  pickupLabel,
+  dropLabel,
+  walletShortfall,
+  onAddMoney,
+  walletBalance,
 }: {
   walletBalance: number | null;
   vehicle: Vehicle;
@@ -1580,7 +1801,11 @@ function ConfirmStep({
   dropLabel: string;
 }) {
   const methods: { id: Payment; label: string; sub: string }[] = [
-    { id: "wallet", label: "Wallet", sub: walletBalance != null ? `₹${walletBalance} balance` : "RIDEHER wallet" },
+    {
+      id: "wallet",
+      label: "Wallet",
+      sub: walletBalance != null ? `₹${walletBalance} balance` : "RIDEHER wallet",
+    },
     { id: "upi", label: "UPI", sub: "Scan QR / UPI app" },
     { id: "card", label: "Card", sub: "Secure checkout" },
     { id: "cash", label: "Cash", sub: "Pay on drop" },
@@ -1614,7 +1839,9 @@ function ConfirmStep({
               <span>{formatMeters(routeInfo.distanceMeters)}</span>
               <span className="text-muted-foreground">·</span>
               <span>~{formatDuration(routeInfo.durationSeconds)}</span>
-              <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Fastest route</span>
+              <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Fastest route
+              </span>
             </div>
           )}
           <div className="my-3 h-px bg-border" />
@@ -1631,7 +1858,11 @@ function ConfirmStep({
           <div className="my-3 h-px bg-border" />
           <div className="space-y-1 text-xs">
             <Row label="Route-based fare estimate" value={`₹${fare}`} />
-            <Row label="Smart Route" value={useSmartRoute ? `−${smartSavings} min saved` : "—"} accent={useSmartRoute} />
+            <Row
+              label="Smart Route"
+              value={useSmartRoute ? `−${smartSavings} min saved` : "—"}
+              accent={useSmartRoute}
+            />
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
             <p className="text-sm font-bold">Total</p>
@@ -1644,8 +1875,8 @@ function ConfirmStep({
         <div className="mb-4 px-6">
           <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
             <p className="text-sm font-semibold">
-              Your wallet balance (₹{walletShortfall.balance}) is not enough for this ride (estimated
-              ₹{walletShortfall.fare}). Please add money to your wallet.
+              Your wallet balance (₹{walletShortfall.balance}) is not enough for this ride
+              (estimated ₹{walletShortfall.fare}). Please add money to your wallet.
             </p>
             <button
               onClick={onAddMoney}
@@ -1658,8 +1889,14 @@ function ConfirmStep({
       )}
 
       <div className="mb-6 px-6">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payment</p>
-        <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Payment
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Payment method"
+          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+        >
           {methods.map((m) => {
             const active = m.id === payment;
             return (
@@ -1669,11 +1906,17 @@ function ConfirmStep({
                 aria-checked={active}
                 onClick={() => setPayment(m.id)}
                 className={`rounded-2xl border p-3 text-left transition ${
-                  active ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background"
+                  active
+                    ? "border-foreground bg-secondary text-secondary-foreground"
+                    : "border-border bg-background"
                 }`}
               >
                 <p className="text-sm font-bold">{m.label}</p>
-                <p className={`mt-1 text-[10px] ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}>{m.sub}</p>
+                <p
+                  className={`mt-1 text-[10px] ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}
+                >
+                  {m.sub}
+                </p>
               </button>
             );
           })}
@@ -1689,7 +1932,9 @@ function ConfirmStep({
           {busy ? "Requesting…" : `Book · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {payment === "upi" || payment === "card" ? "You'll pay before we find your captain" : "OTP shared with captain on pickup"}
+          {payment === "upi" || payment === "card"
+            ? "You'll pay before we find your captain"
+            : "OTP shared with captain on pickup"}
         </p>
       </div>
     </>
@@ -1706,15 +1951,30 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
 }
 
 /* ---------- Searching ---------- */
-function SearchingStep({ onCancel, redispatching }: { onCancel: () => void; redispatching?: boolean }) {
+function SearchingStep({
+  onCancel,
+  redispatching,
+}: {
+  onCancel: () => void;
+  redispatching?: boolean;
+}) {
   return (
     <>
       <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Matching</p>
-        <div className="mx-auto mt-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary" aria-hidden />
-        <h2 className="mt-4 text-2xl font-extrabold tracking-tight">{redispatching ? "Finding another captain…" : "Searching…"}</h2>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Matching
+        </p>
+        <div
+          className="mx-auto mt-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
+          aria-hidden
+        />
+        <h2 className="mt-4 text-2xl font-extrabold tracking-tight">
+          {redispatching ? "Finding another captain…" : "Searching…"}
+        </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          {redispatching ? "Your captain went offline. We're matching you with someone nearby." : "Pinging nearby women captains…"}
+          {redispatching
+            ? "Your captain went offline. We're matching you with someone nearby."
+            : "Pinging nearby women captains…"}
         </p>
       </div>
       <div className="mb-6 px-6">
@@ -1724,7 +1984,7 @@ function SearchingStep({ onCancel, redispatching }: { onCancel: () => void; redi
             <p className="text-xs font-semibold">Broadcasting to nearby captains</p>
           </div>
           <p className="mt-2 text-[10px] font-mono uppercase text-muted-foreground">
-            Open <span className="font-bold">/captain</span> in another tab to accept this ride.
+            We will update this screen when a captain accepts your ride.
           </p>
         </div>
       </div>
@@ -1747,10 +2007,16 @@ function MatchedStep({ ride }: { ride: Ride }) {
   return (
     <>
       <div className="mb-4 px-6">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-accent">Captain matched</p>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">{ride.captain_name ?? "On the way"}</h2>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
+          Captain matched
+        </p>
+        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">
+          {ride.captain_name ?? "On the way"}
+        </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          {ride.captain_rating ? `★ ${Number(ride.captain_rating).toFixed(1)}` : "Captain details are syncing…"}
+          {ride.captain_rating
+            ? `★ ${Number(ride.captain_rating).toFixed(1)}`
+            : "Captain details are syncing…"}
         </p>
       </div>
 
@@ -1768,27 +2034,47 @@ function MatchedStep({ ride }: { ride: Ride }) {
           <div className="my-3 h-px bg-border" />
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Captain contact</p>
-              <p className="mt-1 truncate text-sm font-bold">{ride.captain_phone ?? "Available once the captain details load"}</p>
+              <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                Captain contact
+              </p>
+              <p className="mt-1 truncate text-sm font-bold">
+                {ride.captain_phone ?? "Available once the captain details load"}
+              </p>
             </div>
             {ride.captain_phone && (
-              <a href={`tel:${ride.captain_phone}`} className="rounded-full border border-border px-3 py-1.5 text-xs font-bold">Call</a>
+              <a
+                href={`tel:${ride.captain_phone}`}
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-bold"
+              >
+                Call
+              </a>
             )}
           </div>
           <div className="my-3 h-px bg-border" />
           <div>
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">Share OTP on pickup</p>
-            {ride.otp && <p className="mt-1 text-3xl font-extrabold tracking-[0.3em] text-primary">Share: {ride.otp}</p>}
+            <p className="font-mono text-[10px] uppercase text-muted-foreground">
+              Share OTP on pickup
+            </p>
+            {ride.otp && (
+              <p className="mt-1 text-3xl font-extrabold tracking-[0.3em] text-primary">
+                Share: {ride.otp}
+              </p>
+            )}
             {ride.otp ? (
               <div className="mt-2 flex gap-2">
                 {ride.otp.split("").map((d: string, i: number) => (
-                  <span key={i} className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary">
+                  <span
+                    key={i}
+                    className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary"
+                  >
                     {d}
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-xs font-semibold text-muted-foreground">Securing your pickup OTP…</p>
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                Securing your pickup OTP…
+              </p>
             )}
           </div>
         </div>
@@ -1800,12 +2086,16 @@ function MatchedStep({ ride }: { ride: Ride }) {
             href={ride.captain_phone ? `tel:${ride.captain_phone}` : undefined}
             aria-disabled={!ride.captain_phone}
             className={`grid h-12 place-items-center rounded-full border border-border bg-background text-sm font-bold ${ride.captain_phone ? "" : "pointer-events-none opacity-50"}`}
-          >Call captain</a>
+          >
+            Call captain
+          </a>
           <a
             href={ride.captain_phone ? `sms:${ride.captain_phone}` : undefined}
             aria-disabled={!ride.captain_phone}
             className={`grid h-12 place-items-center rounded-full border border-border bg-background text-sm font-bold ${ride.captain_phone ? "" : "pointer-events-none opacity-50"}`}
-          >Message</a>
+          >
+            Message
+          </a>
         </div>
       </div>
     </>
@@ -1820,7 +2110,11 @@ function useCaptainToPickup(ride: Ride) {
 
 /* ---------- Generic in-ride status ---------- */
 function RideStatusStep({
-  title, subtitle, ride, onNext, ctaLabel,
+  title,
+  subtitle,
+  ride,
+  onNext,
+  ctaLabel,
 }: {
   title: string;
   subtitle: string;
@@ -1848,24 +2142,10 @@ function RideStatusStep({
             <p className="text-sm font-bold">{ride.captain_name ?? "Captain"}</p>
             <p className="text-[10px] text-secondary-foreground/60">{ride.captain_plate ?? ""}</p>
           </div>
-          <button className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-secondary">Call</button>
         </div>
       </div>
 
-      <div className="mb-6 px-6">
-        <button className="w-full rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-left text-xs font-bold text-destructive">
-          SOS · Share ride with contacts
-        </button>
-      </div>
-
-      <div className="px-6 pb-8">
-        <button
-          onClick={onNext}
-          className="h-14 w-full rounded-full bg-primary text-base font-bold text-secondary shadow-xl transition-transform active:scale-95"
-        >
-          {ctaLabel}
-        </button>
-      </div>
+      <RideSafety ride={ride} />
     </>
   );
 }
@@ -1891,14 +2171,34 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
             <p className="text-3xl font-extrabold">₹{fare}</p>
           </div>
           <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-            <div className="flex justify-between"><span>Ride fare</span><span>₹{Math.round(fare * 0.95)}</span></div>
-            <div className="flex justify-between"><span>Taxes & fees</span><span>₹{fare - Math.round(fare * 0.95)}</span></div>
+            <div className="flex justify-between">
+              <span>Ride fare</span>
+              <span>₹{Math.round(fare * 0.95)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Taxes & fees</span>
+              <span>₹{fare - Math.round(fare * 0.95)}</span>
+            </div>
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="Distance" value={ride ? `${(haversineKm({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng})).toFixed(1)} km` : "—"} />
-            <Stat label="Duration" value={ride ? `${computeEtaMinutes({lat: ride.pickup_lat, lng: ride.pickup_lng}, {lat: ride.drop_lat, lng: ride.drop_lng}, ride.vehicle_type)} min` : "—"} />
-            <Stat label="Saved" value={ride?.use_smart_route ? "12 min" : "—"} accent />
+            <Stat
+              label="Distance"
+              value={
+                ride
+                  ? `${haversineKm({ lat: ride.pickup_lat, lng: ride.pickup_lng }, { lat: ride.drop_lat, lng: ride.drop_lng }).toFixed(1)} km`
+                  : "—"
+              }
+            />
+            <Stat
+              label="Duration"
+              value={
+                ride
+                  ? `${computeEtaMinutes({ lat: ride.pickup_lat, lng: ride.pickup_lng }, { lat: ride.drop_lat, lng: ride.drop_lng }, ride.vehicle_type)} min`
+                  : "—"
+              }
+            />
+            <Stat label="Time saved" value="Unavailable" />
           </div>
         </div>
       </div>
@@ -1926,7 +2226,14 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 /* ---------- Rating ---------- */
 function RatingStep({
-  captainName, rating, setRating, tip, setTip, comment, setComment, onDone,
+  captainName,
+  rating,
+  setRating,
+  tip,
+  setTip,
+  comment,
+  setComment,
+  onDone,
 }: {
   comment: string;
   setComment: (s: string) => void;
@@ -1941,7 +2248,9 @@ function RatingStep({
   return (
     <>
       <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Feedback</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Feedback
+        </p>
         <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Rate {captainName}</h2>
       </div>
 
@@ -1961,7 +2270,9 @@ function RatingStep({
       </div>
 
       <div className="mb-6 px-6">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Add a tip</p>
+        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Add a tip
+        </p>
         <div className="grid grid-cols-4 gap-2">
           {tips.map((t) => {
             const active = t === tip;
@@ -1970,7 +2281,9 @@ function RatingStep({
                 key={t}
                 onClick={() => setTip(t)}
                 className={`rounded-2xl border py-3 text-sm font-bold transition ${
-                  active ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background"
+                  active
+                    ? "border-foreground bg-secondary text-secondary-foreground"
+                    : "border-border bg-background"
                 }`}
               >
                 {t === 0 ? "None" : `₹${t}`}
@@ -1981,7 +2294,12 @@ function RatingStep({
       </div>
 
       <div className="mb-6 px-6">
-        <label className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground" htmlFor="rate-comment">Comment (optional)</label>
+        <label
+          className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+          htmlFor="rate-comment"
+        >
+          Comment (optional)
+        </label>
         <textarea
           id="rate-comment"
           value={comment}
@@ -2006,7 +2324,12 @@ function RatingStep({
 }
 
 /* ---------- Wallet top-up ---------- */
-function WalletTopup({ balance, busy, onClose, onTopup }: {
+function WalletTopup({
+  balance,
+  busy,
+  onClose,
+  onTopup,
+}: {
   balance: number | null;
   busy: boolean;
   onClose: () => void;
@@ -2047,7 +2370,9 @@ function WalletTopup({ balance, busy, onClose, onTopup }: {
               key={p}
               onClick={() => setAmount(String(p))}
               className={`h-12 rounded-2xl border text-sm font-bold transition ${
-                Number(amount) === p ? "border-foreground bg-secondary text-secondary-foreground" : "border-border bg-background"
+                Number(amount) === p
+                  ? "border-foreground bg-secondary text-secondary-foreground"
+                  : "border-border bg-background"
               }`}
             >
               ₹{p}
@@ -2074,7 +2399,16 @@ function WalletTopup({ balance, busy, onClose, onTopup }: {
 }
 
 /* ---------- Online payment (UPI / Card) ---------- */
-function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, onCancel }: {
+function PaymentStep({
+  rideId,
+  method,
+  fare,
+  intent,
+  onPaid,
+  onRetry,
+  onSwitch,
+  onCancel,
+}: {
   rideId: string;
   method: Payment;
   fare: number;
@@ -2084,7 +2418,8 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
   onSwitch: () => void;
   onCancel: () => void;
 }) {
-  const expiresAt = intent.metadata?.expiresAt;
+  const [fallbackExpiry] = useState(() => new Date(Date.now() + 15 * 60 * 1000).toISOString());
+  const expiresAt = intent.metadata?.expiresAt ?? fallbackExpiry;
   const [left, setLeft] = useState(() => secondsUntil(expiresAt));
   const [status, setStatus] = useState<PaymentStatus>("PENDING");
   const [busy, setBusy] = useState(false);
@@ -2097,7 +2432,7 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
 
   // Poll every 3s until paid; webhooks can be delayed, so keep checking.
   useEffect(() => {
-    if (expired || status === "PAID") return;
+    if (status === "PAID") return;
     let cancelled = false;
     const check = async () => {
       try {
@@ -2111,7 +2446,10 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
     };
     void check();
     const id = window.setInterval(check, 3000);
-    return () => { cancelled = true; window.clearInterval(id); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, expired, status]);
 
@@ -2124,9 +2462,13 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
   return (
     <>
       <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{method === "card" ? "Card payment" : "UPI payment"}</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {method === "card" ? "Card payment" : "UPI payment"}
+        </p>
         <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{fare} to book</h2>
-        <p className="mt-1 text-xs text-muted-foreground">We'll find your captain as soon as payment is confirmed.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          We'll find your captain as soon as payment is confirmed.
+        </p>
       </div>
 
       {status === "FAILED" && !expired && (
@@ -2138,38 +2480,82 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
       {expired ? (
         <div className="mx-6 mb-6 rounded-2xl border border-border bg-muted p-5 text-center">
           <p className="text-base font-bold">Payment time ran out</p>
-          <p className="mt-1 text-xs text-muted-foreground">No money was taken. Try again or choose another way to pay.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Check your payment app for any debit. Payment confirmation may be delayed.
+          </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button disabled={busy} onClick={async () => { setBusy(true); try { await onRetry(); } finally { setBusy(false); } }} className="h-12 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60">
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await onRetry();
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="h-12 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60"
+            >
               {busy ? "Retrying…" : "Retry"}
             </button>
-            <button onClick={onSwitch} className="h-12 rounded-full border border-border bg-background text-sm font-bold">Switch method</button>
+            <button
+              onClick={onSwitch}
+              className="h-12 rounded-full border border-border bg-background text-sm font-bold"
+            >
+              Switch method
+            </button>
           </div>
         </div>
       ) : (
         <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
           {qr ? (
-            <img src={qr} alt="Scan to pay with any UPI app" className="mx-auto h-52 w-52 rounded-xl bg-background p-2" />
+            <img
+              src={qr}
+              alt="Scan to pay with any UPI app"
+              className="mx-auto h-52 w-52 rounded-xl bg-background p-2"
+            />
           ) : (
-            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">QR loading…</div>
+            <div className="mx-auto grid h-52 w-52 place-items-center rounded-xl bg-muted text-xs text-muted-foreground">
+              Payment checkout is unavailable. You can cancel or switch payment method.
+            </div>
           )}
-          <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">Expires in {mm}:{ss}</p>
+          <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">
+            Expires in {mm}:{ss}
+          </p>
           <div className="mt-4 grid gap-2">
             {upi && (
-              <a href={upi} className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Pay with UPI app</a>
+              <a
+                href={upi}
+                className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+              >
+                Pay with UPI app
+              </a>
             )}
             {checkout && method === "card" && (
-              <a href={checkout} target="_blank" rel="noreferrer" className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">Open card checkout</a>
+              <a
+                href={checkout}
+                target="_blank"
+                rel="noreferrer"
+                className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+              >
+                Open card checkout
+              </a>
             )}
           </div>
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for payment confirmation…
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for payment
+            confirmation…
           </div>
         </div>
       )}
 
       <div className="px-6 pb-12">
-        <button onClick={onCancel} className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold">Cancel booking</button>
+        <button
+          onClick={onCancel}
+          className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold"
+        >
+          Cancel booking
+        </button>
       </div>
     </>
   );

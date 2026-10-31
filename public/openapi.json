@@ -1,288 +1,279 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "RIDEHER Backend API",
-    "version": "1.0.0",
-    "description": "Endpoints used by the RIDEHER frontend. Split into two groups: (1) TanStack Start server functions invoked over the internal RPC protocol, and (2) Lovable Cloud Data API endpoints (PostgREST) reached with the anon key + a signed-in bearer token. RLS is enforced on every table; only rows where the caller is a participant are visible."
+    "title": "RIDEHER frontend integration reference",
+    "version": "0.1.0",
+    "description": "Derived from frontend usage, not a backend-certified specification. Request/response schemas, ownership guarantees and missing lifecycle endpoints must be supplied by the backend. Supabase legacy table operations are not used for ride booking."
   },
   "servers": [
-    { "url": "/", "description": "Same-origin app (server functions live at /_serverFn/*)" },
-    { "url": "{VITE_SUPABASE_URL}", "description": "Lovable Cloud Data API base", "variables": { "VITE_SUPABASE_URL": { "default": "https://<your-project>.supabase.co" } } }
-  ],
-  "tags": [
-    { "name": "Routing", "description": "Turn-by-turn + polyline computation via Google Maps Routes." },
-    { "name": "Rides", "description": "Ride lifecycle: create, read, update status, rate." },
-    { "name": "RideLocations", "description": "Live captain location stream for a ride." },
-    { "name": "CommunityRoutes", "description": "AI-verified community route catalog." }
+    {
+      "url": "https://api.rideher.in/api/v1"
+    }
   ],
   "components": {
     "securitySchemes": {
-      "supabaseAnon": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "apikey",
-        "description": "Public anon publishable key (VITE_SUPABASE_PUBLISHABLE_KEY)."
-      },
-      "supabaseBearer": {
+      "bearerAuth": {
         "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "User session access token from Lovable Cloud Auth (anonymous or Google)."
-      }
-    },
-    "schemas": {
-      "LatLng": {
-        "type": "object",
-        "required": ["lat", "lng"],
-        "properties": {
-          "lat": { "type": "number", "format": "double" },
-          "lng": { "type": "number", "format": "double" }
-        }
-      },
-      "ComputeRouteRequest": {
-        "type": "object",
-        "required": ["origin", "destination"],
-        "properties": {
-          "origin": { "$ref": "#/components/schemas/LatLng" },
-          "destination": { "$ref": "#/components/schemas/LatLng" },
-          "travelMode": { "type": "string", "enum": ["DRIVE", "TWO_WHEELER"], "default": "TWO_WHEELER" }
-        }
-      },
-      "RouteStep": {
-        "type": "object",
-        "properties": {
-          "instruction": { "type": "string" },
-          "maneuver": { "type": "string" },
-          "distanceMeters": { "type": "integer" },
-          "endLat": { "type": "number" },
-          "endLng": { "type": "number" },
-          "encodedPolyline": { "type": "string" }
-        }
-      },
-      "ComputeRouteResponse": {
-        "type": "object",
-        "properties": {
-          "encodedPolyline": { "type": "string", "description": "Google encoded polyline for the full route." },
-          "distanceMeters": { "type": "integer" },
-          "durationSeconds": { "type": "integer" },
-          "steps": { "type": "array", "items": { "$ref": "#/components/schemas/RouteStep" } }
-        }
-      },
-      "Ride": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "rider_user_id": { "type": "string", "format": "uuid", "nullable": true },
-          "rider_device_id": { "type": "string" },
-          "captain_user_id": { "type": "string", "format": "uuid", "nullable": true },
-          "captain_device_id": { "type": "string", "nullable": true },
-          "captain_name": { "type": "string", "nullable": true },
-          "captain_vehicle": { "type": "string", "nullable": true },
-          "captain_plate": { "type": "string", "nullable": true },
-          "captain_rating": { "type": "number", "nullable": true },
-          "pickup_label": { "type": "string" },
-          "pickup_lat": { "type": "number" },
-          "pickup_lng": { "type": "number" },
-          "drop_label": { "type": "string" },
-          "drop_lat": { "type": "number" },
-          "drop_lng": { "type": "number" },
-          "vehicle_type": { "type": "string", "example": "bike | auto | cab" },
-          "fare_inr": { "type": "number" },
-          "tip_inr": { "type": "number" },
-          "payment_method": { "type": "string" },
-          "otp": { "type": "string" },
-          "status": {
-            "type": "string",
-            "enum": ["searching", "accepted", "arriving", "in_progress", "completed", "rated", "cancelled"]
-          },
-          "use_smart_route": { "type": "boolean" },
-          "smart_route_savings_min": { "type": "integer" },
-          "rating": { "type": "integer", "nullable": true, "minimum": 1, "maximum": 5 },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
-        }
-      },
-      "RideInsert": {
-        "type": "object",
-        "required": ["rider_device_id", "pickup_label", "pickup_lat", "pickup_lng", "drop_label", "drop_lat", "drop_lng", "fare_inr", "otp"],
-        "properties": {
-          "rider_device_id": { "type": "string" },
-          "pickup_label": { "type": "string" },
-          "pickup_lat": { "type": "number" },
-          "pickup_lng": { "type": "number" },
-          "drop_label": { "type": "string" },
-          "drop_lat": { "type": "number" },
-          "drop_lng": { "type": "number" },
-          "vehicle_type": { "type": "string" },
-          "fare_inr": { "type": "number" },
-          "otp": { "type": "string" },
-          "use_smart_route": { "type": "boolean" },
-          "smart_route_savings_min": { "type": "integer" }
-        }
-      },
-      "RideLocation": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "ride_id": { "type": "string", "format": "uuid" },
-          "lat": { "type": "number" },
-          "lng": { "type": "number" },
-          "heading": { "type": "number", "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" }
-        }
-      },
-      "CommunityRoute": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "title": { "type": "string" },
-          "from_label": { "type": "string" },
-          "from_lat": { "type": "number" },
-          "from_lng": { "type": "number" },
-          "to_label": { "type": "string" },
-          "to_lat": { "type": "number" },
-          "to_lng": { "type": "number" },
-          "encoded_polyline": { "type": "string", "nullable": true },
-          "safety_score": { "type": "number" },
-          "savings_min": { "type": "integer" },
-          "ai_confidence": { "type": "number" },
-          "verified_by": { "type": "integer" },
-          "created_at": { "type": "string", "format": "date-time" }
-        }
+        "scheme": "bearer"
       }
     }
   },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
   "paths": {
-    "/_serverFn/computeRoute": {
+    "/auth/login": {
       "post": {
-        "tags": ["Routing"],
-        "summary": "Compute a route between two points",
-        "description": "Server function (`computeRoute` in `src/lib/routes.functions.ts`) that proxies Google Maps Routes v2 through the Lovable connector gateway. Returns an encoded polyline plus turn-by-turn steps. Call from the client with `useServerFn(computeRoute)`; do not `fetch()` this URL directly with plain JSON — TanStack Start uses a serialized RPC envelope.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ComputeRouteRequest" }
-            }
-          }
-        },
+        "summary": "Email and password login with expectedRole",
         "responses": {
           "200": {
-            "description": "Route computed.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ComputeRouteResponse" } } }
-          },
-          "500": { "description": "Google Maps connector not configured or upstream Routes API error." }
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/signup/customer": {
+      "post": {
+        "summary": "Customer registration",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Refresh authentication",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Read authenticated account",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
         }
       }
     },
-    "/rest/v1/rides": {
-      "get": {
-        "tags": ["Rides"],
-        "summary": "List rides visible to the caller",
-        "description": "PostgREST list endpoint. RLS filters rows to those where `auth.uid()` matches `rider_user_id` or `captain_user_id`. Use query params like `?status=eq.searching&order=created_at.desc&limit=20`.",
-        "security": [{ "supabaseAnon": [], "supabaseBearer": [] }],
-        "parameters": [
-          { "name": "select", "in": "query", "schema": { "type": "string" }, "example": "*" },
-          { "name": "status", "in": "query", "schema": { "type": "string" }, "example": "eq.searching" },
-          { "name": "order", "in": "query", "schema": { "type": "string" }, "example": "created_at.desc" }
-        ],
+    "/rides/request": {
+      "post": {
+        "summary": "Create ride using Idempotency-Key",
         "responses": {
           "200": {
-            "description": "Rides",
-            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Ride" } } } }
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/rides/history/me": {
+      "get": {
+        "summary": "Read customer ride history including active rides for recovery",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
           }
         }
-      },
-      "post": {
-        "tags": ["Rides"],
-        "summary": "Create a ride request",
-        "security": [{ "supabaseAnon": [], "supabaseBearer": [] }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RideInsert" } } }
-        },
+      }
+    },
+    "/rides/{id}/booking-details": {
+      "get": {
+        "summary": "Read participant booking details",
         "responses": {
-          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ride" } } } }
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/rides/{id}/cancel": {
+      "post": {
+        "summary": "Cancel ride and return canonical state",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/rides/estimate": {
+      "post": {
+        "summary": "Estimate route and vehicle fares",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
         }
-      },
+      }
+    },
+    "/rides/{id}/rate": {
+      "post": {
+        "summary": "Rate completed trip",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/payments/ride/{id}": {
+      "get": {
+        "summary": "Read payment status",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/captains/me/availability": {
       "patch": {
-        "tags": ["Rides"],
-        "summary": "Update a ride (status, captain assignment, rating, tip)",
-        "description": "Requires a filter query param such as `?id=eq.<ride_id>`. Only participants (rider or captain) can update, enforced by RLS.",
-        "security": [{ "supabaseAnon": [], "supabaseBearer": [] }],
-        "parameters": [
-          { "name": "id", "in": "query", "required": true, "schema": { "type": "string" }, "example": "eq.<uuid>" }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "status": { "type": "string" },
-                  "captain_user_id": { "type": "string" },
-                  "captain_name": { "type": "string" },
-                  "captain_vehicle": { "type": "string" },
-                  "captain_plate": { "type": "string" },
-                  "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
-                  "tip_inr": { "type": "number" }
-                }
-              }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Updated" } }
-      }
-    },
-    "/rest/v1/ride_locations": {
-      "get": {
-        "tags": ["RideLocations"],
-        "summary": "Fetch location pings for a ride",
-        "description": "Filter with `?ride_id=eq.<uuid>&order=created_at.desc&limit=1` to get the latest captain position. Realtime channel `ride_locations` emits INSERTs for the same rows.",
-        "security": [{ "supabaseAnon": [], "supabaseBearer": [] }],
-        "parameters": [
-          { "name": "ride_id", "in": "query", "required": true, "schema": { "type": "string" }, "example": "eq.<uuid>" }
-        ],
+        "summary": "Update captain availability",
         "responses": {
-          "200": { "description": "Locations", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RideLocation" } } } } }
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
         }
-      },
-      "post": {
-        "tags": ["RideLocations"],
-        "summary": "Push a captain location ping",
-        "description": "Called by the captain portal every few seconds during `accepted`/`arriving`/`in_progress`. RLS restricts inserts to the assigned captain.",
-        "security": [{ "supabaseAnon": [], "supabaseBearer": [] }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["ride_id", "lat", "lng"],
-                "properties": {
-                  "ride_id": { "type": "string", "format": "uuid" },
-                  "lat": { "type": "number" },
-                  "lng": { "type": "number" },
-                  "heading": { "type": "number" }
-                }
-              }
-            }
-          }
-        },
-        "responses": { "201": { "description": "Created" } }
       }
     },
-    "/rest/v1/community_routes": {
+    "/rides/offers/me": {
       "get": {
-        "tags": ["CommunityRoutes"],
-        "summary": "List AI-verified community routes",
-        "description": "Public read (anon SELECT allowed). Powers the `/routes` catalog and homepage community section.",
-        "security": [{ "supabaseAnon": [] }],
-        "parameters": [
-          { "name": "select", "in": "query", "schema": { "type": "string" }, "example": "*" },
-          { "name": "order", "in": "query", "schema": { "type": "string" }, "example": "safety_score.desc" }
-        ],
+        "summary": "Read captain offers",
         "responses": {
-          "200": { "description": "Routes", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CommunityRoute" } } } } }
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        }
+      }
+    },
+    "/rides/{id}/accept": {
+      "post": {
+        "summary": "Accept offer",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/rides/{id}/arrived": {
+      "post": {
+        "summary": "Mark arrival",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/community-routes": {
+      "get": {
+        "summary": "Read community route catalog",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "summary": "Read user profile",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
+        }
+      }
+    },
+    "/users/me/wallet": {
+      "get": {
+        "summary": "Read wallet balance",
+        "responses": {
+          "200": {
+            "description": "Shape depends on backend contract; consult frontend client."
+          }
         }
       }
     }

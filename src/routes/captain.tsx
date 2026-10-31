@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { MapPin, Navigation, Phone, Timer } from "lucide-react";
+import { RequireRole } from "@/components/rc/RequireRole";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { API_BASE_URL, captainApi, rideApi, storage, type BookingDetails } from "@/lib/api";
 
@@ -9,14 +10,26 @@ export const Route = createFileRoute("/captain")({
   head: () => ({
     meta: [
       { title: "Captain Portal — RIDEHER" },
-      { name: "description", content: "Go online, receive live ride offers and navigate to pickups as a RIDEHER captain." },
+      {
+        name: "description",
+        content:
+          "Go online, receive live ride offers and navigate to pickups as a RIDEHER captain.",
+      },
       { property: "og:title", content: "Captain Portal — RIDEHER" },
-      { property: "og:description", content: "Go online, receive live ride offers and navigate to pickups as a RIDEHER captain." },
+      {
+        property: "og:description",
+        content:
+          "Go online, receive live ride offers and navigate to pickups as a RIDEHER captain.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: CaptainPage,
+  component: () => (
+    <RequireRole role="CAPTAIN">
+      <CaptainPage />
+    </RequireRole>
+  ),
 });
 
 type VehicleType = "BIKE" | "AUTO" | "CAB";
@@ -33,21 +46,42 @@ type Offer = {
   expiresAt: number; // ms epoch
 };
 
+type OfferInput = Omit<Partial<Offer>, "expiresAt"> & {
+  id?: string;
+  pickupAddress?: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropAddress?: string;
+  dropLat?: number;
+  dropLng?: number;
+  expiresInSeconds?: number;
+  expiresAt?: string | number;
+};
+
 // Accept both the socket `ride:request` shape and REST list shapes.
-function toOffer(raw: any): Offer | null {
+function toOffer(raw: OfferInput): Offer | null {
   const id = raw?.rideId ?? raw?.id;
   if (!id) return null;
-  const pickup = raw.pickup ?? { address: raw.pickupAddress, lat: raw.pickupLat, lng: raw.pickupLng };
+  const pickup = raw.pickup ?? {
+    address: raw.pickupAddress,
+    lat: raw.pickupLat,
+    lng: raw.pickupLng,
+  };
   const drop = raw.drop ?? { address: raw.dropAddress, lat: raw.dropLat, lng: raw.dropLng };
   const secs = Number(raw.expiresInSeconds ?? 30);
-  const expiresAt = raw.expiresAt ? Date.parse(raw.expiresAt) : Date.now() + secs * 1000;
+  const expiresAt = raw.expiresAt
+    ? typeof raw.expiresAt === "number"
+      ? raw.expiresAt
+      : Date.parse(raw.expiresAt)
+    : Date.now() + secs * 1000;
   return {
     rideId: String(id),
     pickup: { ...pickup, address: pickup?.address ?? "Pickup" },
     drop: { ...drop, address: drop?.address ?? "Drop" },
     vehicleType: String(raw.vehicleType ?? "BIKE"),
     fareEstimate: Number(raw.fareEstimate ?? 0),
-    captainEarningsEstimate: raw.captainEarningsEstimate != null ? Number(raw.captainEarningsEstimate) : undefined,
+    captainEarningsEstimate:
+      raw.captainEarningsEstimate != null ? Number(raw.captainEarningsEstimate) : undefined,
     paymentMethod: raw.paymentMethod,
     paymentStatus: raw.paymentStatus,
     expiresAt: Number.isFinite(expiresAt) ? expiresAt : Date.now() + 30000,
@@ -59,11 +93,16 @@ function paymentBadge(o: Offer): string {
   if (m === "CASH") return "Cash";
   if (m === "WALLET") return "Wallet";
   const label = m === "UPI" ? "UPI" : "Card";
-  return String(o.paymentStatus ?? "").toUpperCase() === "PAID" ? `${label}-Paid` : `${label}-Pending`;
+  return String(o.paymentStatus ?? "").toUpperCase() === "PAID"
+    ? `${label}-Paid`
+    : `${label}-Pending`;
 }
 
 function CaptainPage() {
   const [online, setOnline] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [recovering, setRecovering] = useState(true);
+  const actionRef = useRef(false);
   const [vehicleType, setVehicleType] = useState<VehicleType>("BIKE");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [active, setActive] = useState<BookingDetails | null>(null);
@@ -77,6 +116,53 @@ function CaptainPage() {
   const signedIn = typeof window !== "undefined" && !!storage.getAccessToken();
 
   useEffect(() => {
+    let disposed = false;
+    const restore = async () => {
+      try {
+        const rides = await captainApi.active();
+        const current = rides.find((ride) =>
+          ["MATCHED", "ARRIVING", "IN_PROGRESS"].includes(ride.status),
+        );
+        if (current) {
+          const response = await rideApi.bookingDetails(current.rideId ?? current.id);
+          const { otp: _otp, ...safe } = response.data;
+          if (!disposed) setActive(safe);
+        }
+        if (!disposed) setRecovering(false);
+      } catch {
+        if (!disposed) setError("Could not restore your active trip. Reload before going online.");
+      }
+    };
+    void restore();
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const { data } = await rideApi.bookingDetails(active.rideId);
+        if (disposed) return;
+        const { otp: _otp, ...safe } = data;
+        if (data.status === "COMPLETED" || data.status === "CANCELLED") {
+          setNotice(data.status === "COMPLETED" ? "Trip completed." : "Trip cancelled.");
+          setActive(null);
+        } else setActive(safe);
+      } catch {
+        if (!disposed) setError("Trip updates are unavailable. Retrying…");
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [active?.rideId]);
+
+  useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
@@ -86,7 +172,7 @@ function CaptainPage() {
     setOffers((list) => list.filter((o) => o.expiresAt > now));
   }, [now]);
 
-  function addOffers(raws: any[]) {
+  function addOffers(raws: OfferInput[]) {
     setOffers((list) => {
       const map = new Map(list.map((o) => [o.rideId, o]));
       for (const r of raws) {
@@ -107,12 +193,12 @@ function CaptainPage() {
     });
     socketRef.current = socket;
     socket.on("connect", () => socket.emit("status:toggle", { isOnline: true, vehicleType }));
-    socket.on("ride:request", (data: any) => addOffers([data]));
-    socket.on("ride:accepted", (data: any) => {
+    socket.on("ride:request", (data: OfferInput) => addOffers([data]));
+    socket.on("ride:accepted", (data: { rideId?: string; id?: string }) => {
       // Someone else took it (or our accept confirmed) — remove from list.
       setOffers((l) => l.filter((o) => o.rideId !== (data?.rideId ?? data?.id)));
     });
-    socket.on("ride:cancelled_by_rider", (data: any) => {
+    socket.on("ride:cancelled_by_rider", (data: { rideId?: string; id?: string }) => {
       const id = data?.rideId ?? data?.id;
       setOffers((l) => l.filter((o) => o.rideId !== id));
       setActive((a) => {
@@ -123,7 +209,16 @@ function CaptainPage() {
         return a;
       });
     });
-    socket.on("ride:otp_verified", () => setNotice("OTP verified — trip started. Drive safe!"));
+    socket.on("ride:otp_verified", (data: { rideId?: string }) => {
+      setActive((current) =>
+        current && data?.rideId === current.rideId
+          ? { ...current, status: "IN_PROGRESS" }
+          : current,
+      );
+    });
+    socket.on("connect_error", () =>
+      setError("Live connection unavailable. Checking offers periodically."),
+    );
 
     let watchId: number | null = null;
     if ("geolocation" in navigator) {
@@ -133,7 +228,7 @@ function CaptainPage() {
           posRef.current = next;
           setPos(next);
         },
-        () => {},
+        () => setError("Location access is required to share your position. Enable GPS and retry."),
         { enableHighAccuracy: true, maximumAge: 1000 },
       );
     }
@@ -153,7 +248,10 @@ function CaptainPage() {
 
   // Polling fallback every 10s.
   useEffect(() => {
-    if (!online) { setOffers([]); return; }
+    if (!online) {
+      setOffers([]);
+      return;
+    }
     let cancelled = false;
     const poll = async () => {
       try {
@@ -165,17 +263,30 @@ function CaptainPage() {
     };
     void poll();
     const id = window.setInterval(poll, 10000);
-    return () => { cancelled = true; window.clearInterval(id); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, [online]);
 
   async function toggleOnline() {
+    if (availabilityBusy || recovering) return;
     setError(null);
+    setAvailabilityBusy(true);
     const next = !online;
-    setOnline(next);
-    captainApi.setAvailability(next).catch(() => {});
+    try {
+      await captainApi.setAvailability(next);
+      setOnline(next);
+    } catch {
+      setError("Could not change availability. Please try again.");
+    } finally {
+      setAvailabilityBusy(false);
+    }
   }
 
   async function accept(o: Offer) {
+    if (actionRef.current || active || recovering || o.expiresAt <= Date.now()) return;
+    actionRef.current = true;
     setError(null);
     setBusyId(o.rideId);
     try {
@@ -185,23 +296,27 @@ function CaptainPage() {
       // Captains never see the rider's OTP.
       const { otp: _otp, ...safe } = details.data;
       setActive(safe as BookingDetails);
-    } catch (e: any) {
-      setError(e?.error?.message || "Couldn't accept this ride — it may have been taken.");
+      setError(null);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Couldn't accept this ride — it may have been taken.",
+      );
       setOffers((l) => l.filter((x) => x.rideId !== o.rideId));
     } finally {
+      actionRef.current = false;
       setBusyId(null);
     }
   }
 
   async function arrived() {
-    if (!active) return;
+    if (!active || busyId || active.status !== "MATCHED") return;
     setBusyId(active.rideId);
     try {
       await captainApi.arrived(active.rideId);
       setActive({ ...active, status: "ARRIVING" });
       setNotice("Marked as arrived. Ask the rider for her OTP.");
-    } catch (e: any) {
-      setError(e?.error?.message || "Couldn't mark arrival. Try again.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't mark arrival. Try again.");
     } finally {
       setBusyId(null);
     }
@@ -210,20 +325,30 @@ function CaptainPage() {
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground">
       <div className="mx-auto max-w-3xl px-5 pt-8">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Captain portal</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Captain portal
+        </p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Ride offers</h1>
 
         {!signedIn && (
-          <p className="mt-4 rounded-2xl border border-border bg-muted p-4 text-sm">Sign in with your captain account to receive offers.</p>
+          <p className="mt-4 rounded-2xl border border-border bg-muted p-4 text-sm">
+            Sign in with your captain account to receive offers.
+          </p>
         )}
 
         {/* Online toggle */}
         <section className="mt-6 rounded-3xl border border-border bg-card p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-lg font-extrabold">{online ? "You're online" : "You're offline"}</p>
+              <p className="text-lg font-extrabold">
+                {online ? "You're online" : "You're offline"}
+              </p>
               <p className="text-xs text-muted-foreground">
-                {online ? (pos ? `Sharing location · ${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}` : "Waiting for GPS…") : "Go online to start receiving ride offers."}
+                {online
+                  ? pos
+                    ? `Sharing location · ${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`
+                    : "Waiting for GPS…"
+                  : "Go online to start receiving ride offers."}
               </p>
             </div>
             <button
@@ -231,9 +356,12 @@ function CaptainPage() {
               aria-checked={online}
               aria-label="Online"
               onClick={toggleOnline}
+              disabled={availabilityBusy || recovering || (!!active && online)}
               className={`relative h-14 w-28 shrink-0 rounded-full transition ${online ? "bg-primary" : "bg-muted"}`}
             >
-              <span className={`absolute top-1.5 h-11 w-11 rounded-full bg-background shadow transition-all ${online ? "left-[3.75rem]" : "left-1.5"}`} />
+              <span
+                className={`absolute top-1.5 h-11 w-11 rounded-full bg-background shadow transition-all ${online ? "left-[3.75rem]" : "left-1.5"}`}
+              />
             </button>
           </div>
           <div className="mt-4 flex gap-2">
@@ -241,6 +369,7 @@ function CaptainPage() {
               <button
                 key={v}
                 onClick={() => setVehicleType(v)}
+                disabled={online || !!active}
                 className={`rounded-full px-4 py-2 text-xs font-bold ${vehicleType === v ? "bg-secondary text-secondary-foreground" : "border border-border"}`}
               >
                 {v}
@@ -249,34 +378,64 @@ function CaptainPage() {
           </div>
         </section>
 
-        {error && <p className="mt-4 rounded-2xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">{error}</p>}
-        {notice && <p className="mt-4 rounded-2xl bg-primary/10 p-3 text-sm font-semibold text-primary">{notice}</p>}
+        {error && (
+          <p className="mt-4 rounded-2xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+            {error}
+          </p>
+        )}
+        {notice && (
+          <p className="mt-4 rounded-2xl bg-primary/10 p-3 text-sm font-semibold text-primary">
+            {notice}
+          </p>
+        )}
 
         {/* Active trip / navigate to pickup */}
         {active && (
           <section className="mt-6 rounded-3xl bg-secondary p-6 text-secondary-foreground">
             <p className="font-mono text-[10px] uppercase tracking-widest text-primary">
-              {active.status === "ARRIVING" ? "At pickup — ask for OTP" : "Navigate to pickup"}
+              {active.status === "IN_PROGRESS"
+                ? "Trip in progress"
+                : active.status === "ARRIVING"
+                  ? "At pickup"
+                  : "Navigate to pickup"}
             </p>
             <h2 className="mt-2 text-xl font-extrabold">{active.pickup.address}</h2>
-            {active.customer?.name && <p className="mt-1 text-sm font-semibold">Rider: {active.customer.name}{active.customer.phone ? ` · ${active.customer.phone}` : ""}</p>}
-            <p className="mt-1 text-xs opacity-70">Drop: {active.drop.address} · ₹{active.fareEstimate}</p>
+            {active.customer?.name && (
+              <p className="mt-1 text-sm font-semibold">
+                Rider: {active.customer.name}
+                {active.customer.phone ? ` · ${active.customer.phone}` : ""}
+              </p>
+            )}
+            <p className="mt-1 text-xs opacity-70">
+              Drop: {active.drop.address} · ₹{active.fareEstimate}
+            </p>
+            <p className="mt-3 text-xs">
+              Trip start and completion controls are unavailable until the trip service is
+              connected. Status updates appear automatically.
+            </p>
             <div className="mt-4 grid grid-cols-3 gap-2">
               <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${active.pickup.lat},${active.pickup.lng}`}
-                target="_blank" rel="noreferrer"
+                href={`https://www.google.com/maps/dir/?api=1&destination=${active.status === "IN_PROGRESS" ? active.drop.lat : active.pickup.lat},${active.status === "IN_PROGRESS" ? active.drop.lng : active.pickup.lng}`}
+                target="_blank"
+                rel="noreferrer"
                 className="flex h-12 items-center justify-center gap-1 rounded-full bg-primary text-xs font-bold text-primary-foreground"
-              ><Navigation className="h-4 w-4" /> Navigate</a>
+              >
+                <Navigation className="h-4 w-4" /> Navigate
+              </a>
               <a
                 href={active.customer?.phone ? `tel:${active.customer.phone}` : undefined}
                 aria-disabled={!active.customer?.phone}
                 className={`flex h-12 items-center justify-center gap-1 rounded-full border border-secondary-foreground/30 text-xs font-bold ${active.customer?.phone ? "" : "pointer-events-none opacity-60"}`}
-              ><Phone className="h-4 w-4" /> Call rider</a>
+              >
+                <Phone className="h-4 w-4" /> Call rider
+              </a>
               <button
                 onClick={arrived}
-                disabled={busyId === active.rideId || active.status === "ARRIVING"}
+                disabled={busyId === active.rideId || active.status !== "MATCHED"}
                 className="h-12 rounded-full bg-background text-xs font-bold text-foreground disabled:opacity-50"
-              >{active.status === "ARRIVING" ? "Arrived ✓" : "Arrived"}</button>
+              >
+                {active.status === "ARRIVING" ? "Arrived ✓" : "Arrived"}
+              </button>
             </div>
           </section>
         )}
@@ -285,10 +444,14 @@ function CaptainPage() {
         <section className="mt-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-extrabold">Incoming offers</h2>
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">{online ? `${offers.length} live` : "Offline"}</span>
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              {online ? `${offers.length} live` : "Offline"}
+            </span>
           </div>
           {online && offers.length === 0 && (
-            <div className="rounded-3xl bg-muted p-6 text-center text-sm text-muted-foreground">Waiting for the next ride request…</div>
+            <div className="rounded-3xl bg-muted p-6 text-center text-sm text-muted-foreground">
+              Waiting for the next ride request…
+            </div>
           )}
           <div className="space-y-3">
             {offers.map((o) => {
@@ -297,29 +460,49 @@ function CaptainPage() {
                 <div key={o.rideId} className="rounded-3xl border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                      <p className="flex items-center gap-2 truncate text-sm font-semibold"><MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />{o.pickup.address}</p>
-                      <p className="flex items-center gap-2 truncate text-sm font-semibold"><MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />{o.drop.address}</p>
+                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        {o.pickup.address}
+                      </p>
+                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        {o.drop.address}
+                      </p>
                       <div className="flex flex-wrap gap-1.5 pt-1 text-[10px] font-bold uppercase">
                         <span className="rounded-full bg-muted px-2 py-0.5">{o.vehicleType}</span>
                         <span className="rounded-full bg-muted px-2 py-0.5">{paymentBadge(o)}</span>
-                        <span className="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-primary"><Timer className="h-3 w-3" />{left}s</span>
+                        <span className="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-primary">
+                          <Timer className="h-3 w-3" />
+                          {left}s
+                        </span>
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-xl font-extrabold">₹{o.fareEstimate}</p>
-                      {o.captainEarningsEstimate != null && <p className="text-[11px] text-muted-foreground">You earn: ₹{o.captainEarningsEstimate}</p>}
+                      {o.captainEarningsEstimate != null && (
+                        <p className="text-[11px] text-muted-foreground">
+                          You earn: ₹{o.captainEarningsEstimate}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
                     <button
-                      onClick={() => { captainApi.decline(o.rideId).catch(() => {}); setOffers((l) => l.filter((x) => x.rideId !== o.rideId)); }}
+                      onClick={() => {
+                        captainApi.decline(o.rideId).catch(() => {});
+                        setOffers((l) => l.filter((x) => x.rideId !== o.rideId));
+                      }}
                       className="h-11 rounded-full border border-border px-4 text-xs font-bold"
-                    >Pass</button>
+                    >
+                      Pass
+                    </button>
                     <button
                       onClick={() => accept(o)}
-                      disabled={!!active || busyId === o.rideId}
+                      disabled={recovering || !!active || busyId !== null}
                       className="h-11 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-50"
-                    >{busyId === o.rideId ? "Accepting…" : "Accept"}</button>
+                    >
+                      {busyId === o.rideId ? "Accepting…" : "Accept"}
+                    </button>
                   </div>
                 </div>
               );

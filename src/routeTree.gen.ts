@@ -20,10 +20,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RideRouteImport } from './routes/ride'
 import { Route as RoutesRouteImport } from './routes/routes'
 import { Route as SettingsRouteImport } from './routes/settings'
-<<<<<<< Updated upstream
 import { Route as ApiPublicRhSplatRouteImport } from './routes/api/public/rh/$'
-=======
->>>>>>> Stashed changes
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,14 +75,11 @@ const RoutesRoute = RoutesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-<<<<<<< Updated upstream
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicRhSplatRoute = ApiPublicRhSplatRouteImport.update({
   id: '/api/public/rh/$',
   path: '/api/public/rh/$',
-=======
->>>>>>> Stashed changes
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -269,7 +263,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-<<<<<<< Updated upstream
       parentRoute: typeof rootRouteImport
     }
     '/api/public/rh/$': {
@@ -277,8 +270,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/rh/$'
       fullPath: '/api/public/rh/$'
       preLoaderRoute: typeof ApiPublicRhSplatRouteImport
-=======
->>>>>>> Stashed changes
       parentRoute: typeof rootRouteImport
     }
   }

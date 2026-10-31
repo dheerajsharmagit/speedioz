@@ -1,14 +1,18 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { storage, authApi } from "@/lib/api";
 import { useState, useEffect } from "react";
-import { Home, Bike, Users, User, MoreHorizontal, Settings, LogOut, LogIn, ShieldCheck } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Home,
+  Bike,
+  Users,
+  User,
+  MoreHorizontal,
+  Settings,
+  LogOut,
+  LogIn,
+  ShieldCheck,
+} from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -29,8 +33,11 @@ export function RoleNav() {
   }, []);
 
   const logout = async () => {
-    await authApi.logout();
-    window.location.href = "/";
+    try {
+      await authApi.logout();
+    } finally {
+      window.location.href = "/";
+    }
   };
 
   return (
@@ -74,7 +81,9 @@ export function RoleNav() {
             <SheetTrigger
               className={cn(
                 "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-[20px] px-1 py-2 transition-all duration-200 active:scale-95",
-                moreOpen ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                moreOpen
+                  ? "bg-primary/12 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
               aria-label="More options"
             >
@@ -94,6 +103,25 @@ export function RoleNav() {
               </SheetHeader>
 
               <div className="mt-4 space-y-1.5">
+                {user?.role === "CAPTAIN" && (
+                  <Link
+                    to="/captain"
+                    onClick={() => setMoreOpen(false)}
+                    className="block rounded-2xl bg-muted p-4 text-sm font-semibold"
+                  >
+                    Captain portal
+                  </Link>
+                )}
+                {user?.role === "ADMIN" && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMoreOpen(false)}
+                    className="block rounded-2xl bg-muted p-4 text-sm font-semibold"
+                  >
+                    Operations
+                  </Link>
+                )}
+
                 <Link
                   to="/settings"
                   onClick={() => setMoreOpen(false)}
@@ -108,7 +136,7 @@ export function RoleNav() {
                   className="flex items-center gap-3 rounded-2xl bg-muted/50 px-4 py-3.5 text-sm font-semibold transition active:scale-[0.98]"
                 >
                   <ShieldCheck className="h-5 w-5 text-primary" />
-                  Safety & emergency contacts
+                  Safety & profile
                 </Link>
                 {user ? (
                   <button

@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { authApi, type AuthUser } from "@/lib/api";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { useTheme, type Intensity, type Mode } from "@/lib/theme";
@@ -25,12 +27,23 @@ const MODES: { id: Mode; label: string; desc: string }[] = [
 
 function SettingsPage() {
   const { intensity, mode, setIntensity, setMode, markers } = useTheme();
-  const customerStatus = "ACTIVE";
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [statusError, setStatusError] = useState(false);
+  useEffect(() => {
+    authApi
+      .me()
+      .then(({ user }) => setUser(user))
+      .catch(() => setStatusError(true));
+  }, []);
+  const customerStatus = user ? (user.isSuspended ? "SUSPENDED" : "ACTIVE") : "UNKNOWN";
 
   return (
     <div className="min-h-screen bg-background pb-32">
       <div className="mx-auto max-w-2xl px-6 pt-10">
-        <Link to="/" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground">
+        <Link
+          to="/"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+        >
           ← Back
         </Link>
         <h1 className="mt-4 text-4xl font-extrabold tracking-tight">Settings</h1>
@@ -39,7 +52,9 @@ function SettingsPage() {
         <section className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Account status</p>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Account status
+              </p>
               <h2 className="mt-2 text-xl font-extrabold">Customer profile</h2>
             </div>
             <span
@@ -49,7 +64,13 @@ function SettingsPage() {
                   : "bg-amber-500/10 text-amber-600"
               }`}
             >
-              {customerStatus === "ACTIVE" ? "Active" : "Pending"}
+              {customerStatus === "ACTIVE"
+                ? "Active"
+                : customerStatus === "SUSPENDED"
+                  ? "Suspended"
+                  : statusError
+                    ? "Unavailable"
+                    : "Checking…"}
             </span>
           </div>
 
@@ -57,14 +78,16 @@ function SettingsPage() {
             <p className="text-sm font-semibold">Booking access</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {customerStatus === "ACTIVE"
-                ? "Your customer account is active and ready to book rides whenever you need it."
-                : "Your account is being prepared. You can continue once it is activated."}
+                ? "Your account is active. Booking availability depends on your location and account role."
+                : "Your account status could not be confirmed as active."}
             </p>
           </div>
         </section>
 
         <section className="mt-10">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Theme intensity</h2>
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Theme intensity
+          </h2>
           <div className="mt-3 grid gap-3">
             {INTENSITIES.map((opt) => {
               const active = intensity === opt.id;
@@ -99,7 +122,9 @@ function SettingsPage() {
         </section>
 
         <section className="mt-10">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Appearance</h2>
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Appearance
+          </h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
             {MODES.map((opt) => {
               const active = mode === opt.id;
@@ -123,22 +148,45 @@ function SettingsPage() {
         </section>
 
         <section className="mt-10 rounded-3xl border border-border bg-card p-5">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Preview</h2>
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Preview
+          </h2>
           <div className="mt-4 flex items-center gap-4">
             <div className="flex -space-x-2">
-              <span className="h-9 w-9 rounded-full border-2 border-background" style={{ background: markers.pickupFill, borderColor: markers.pickupStroke }} />
-              <span className="h-9 w-9 rounded-full border-2 border-background" style={{ background: markers.dropFill, borderColor: markers.dropStroke }} />
-              <span className="h-9 w-9 rounded-full border-2 border-background" style={{ background: markers.captainFill, borderColor: markers.captainStroke }} />
+              <span
+                className="h-9 w-9 rounded-full border-2 border-background"
+                style={{ background: markers.pickupFill, borderColor: markers.pickupStroke }}
+              />
+              <span
+                className="h-9 w-9 rounded-full border-2 border-background"
+                style={{ background: markers.dropFill, borderColor: markers.dropStroke }}
+              />
+              <span
+                className="h-9 w-9 rounded-full border-2 border-background"
+                style={{ background: markers.captainFill, borderColor: markers.captainStroke }}
+              />
             </div>
             <div className="flex-1">
-              <div className="h-1.5 w-full rounded-full" style={{ background: markers.routeStroke }} />
-              <div className="mt-2 h-1.5 w-2/3 rounded-full" style={{ background: markers.routeTraveled }} />
+              <div
+                className="h-1.5 w-full rounded-full"
+                style={{ background: markers.routeStroke }}
+              />
+              <div
+                className="mt-2 h-1.5 w-2/3 rounded-full"
+                style={{ background: markers.routeTraveled }}
+              />
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            <button className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">Primary</button>
-            <button className="rounded-full bg-secondary px-4 py-2 text-xs font-semibold text-secondary-foreground">Secondary</button>
-            <button className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground">Accent</button>
+            <button className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">
+              Primary
+            </button>
+            <button className="rounded-full bg-secondary px-4 py-2 text-xs font-semibold text-secondary-foreground">
+              Secondary
+            </button>
+            <button className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground">
+              Accent
+            </button>
           </div>
         </section>
       </div>

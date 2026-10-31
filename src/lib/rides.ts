@@ -1,4 +1,3 @@
-
 export type RideStatus =
   | "destination"
   | "vehicle"
@@ -38,6 +37,7 @@ export interface Ride {
 }
 
 export interface CommunityRoute {
+  created_at?: string;
   id: string;
   title: string;
   from_label: string;

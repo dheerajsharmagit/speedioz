@@ -1,0 +1,10 @@
+{
+  "name": "RIDEHER",
+  "short_name": "RIDEHER",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff7fb",
+  "theme_color": "#EC4899",
+  "icons": [{ "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
