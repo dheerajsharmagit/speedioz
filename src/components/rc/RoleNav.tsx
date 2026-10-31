@@ -43,12 +43,12 @@ export function RoleNav() {
   };
 
   return (
-    // Sticky (not fixed): the bar takes up real space at the end of the page,
-    // so it can never float over buttons or content on any screen.
+    // In-flow (not fixed/floating): the bar takes up real space at the end of
+    // each screen, so it can never float over buttons or content anywhere.
     <nav
       ref={navRef}
       aria-label="Main menu"
-      className="sticky bottom-0 z-40 mt-auto px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
+      className="z-40 mt-auto px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2"
     >
         <div className="mx-auto flex max-w-[480px] items-stretch gap-1 rounded-[26px] border border-border/70 bg-card/85 p-1.5 shadow-[0_10px_40px_-12px_hsl(var(--primary)/0.45)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/70">
           {TABS.map(({ to, label, icon: Icon }) => {
