@@ -837,6 +837,16 @@ function RidePage() {
       console.error(e);
       const apiError = e instanceof RequestError ? e.error : undefined;
       const code = apiError?.code;
+      // Cash is the only booking method. Some ride-server builds still require
+      // a wallet balance before accepting cash — surface that clearly instead
+      // of the raw server string.
+      const errText = `${code ?? ""} ${apiError?.message ?? ""}`.toLowerCase();
+      if (errText.includes("wallet") || errText.includes("insufficient")) {
+        alert(
+          "Cash booking isn't being accepted right now: the ride server requires a wallet balance for cash rides. Please try again later.",
+        );
+        return;
+      }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
