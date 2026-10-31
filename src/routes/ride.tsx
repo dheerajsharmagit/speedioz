@@ -2078,7 +2078,7 @@ function SearchingStep({
 }
 
 /* ---------- Matched ---------- */
-function MatchedStep({ ride }: { ride: Ride }) {
+function MatchedStep({ ride, cancelSlot }: { ride: Ride; cancelSlot?: ReactNode }) {
   // Animate captain toward pickup after matching
   useCaptainToPickup(ride);
   return (
