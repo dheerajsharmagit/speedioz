@@ -878,13 +878,18 @@ function RidePage() {
       const apiError = e instanceof RequestError ? e.error : undefined;
       const code = apiError?.code;
       // The server can still reject the booking for a low wallet — show the
-      // same friendly top-up prompt instead of the raw error string.
+      // same friendly top-up prompt instead of the raw error string. Without
+      // wallet support on the server (balance unknown), guide to online pay.
       const errText = `${code ?? ""} ${apiError?.message ?? ""}`.toLowerCase();
       if (
         (errText.includes("wallet") && errText.includes("balance")) ||
         errText.includes("insufficient")
       ) {
-        setWalletShortfall({ balance: walletBalance ?? 0, fare });
+        if (walletBalance != null) {
+          setWalletShortfall({ balance: walletBalance, fare });
+        } else {
+          alert("Cash isn't available for this ride right now. Please pay with UPI or Card.");
+        }
         return;
       }
       const msg =
@@ -903,12 +908,15 @@ function RidePage() {
   // Wallet top-up: pay through Razorpay test checkout, then credit the wallet
   // on the RIDEHER backend once the payment verifies.
   async function handleTopup(amount: number) {
+    // The top-up dialog only opens when the server's wallet endpoints answer.
+    if (walletBalance == null) return;
     setTopupBusy(true);
     try {
       const order = await createRazorpayOrderFn({
         data: { amount, description: "RIDEHER wallet top-up" },
       });
       if (!order.ok) {
+        console.error("Razorpay order unavailable:", order.error);
         alert("Payment checkout isn't available right now. Please try again shortly.");
         return;
       }
@@ -1577,7 +1585,7 @@ function RidePage() {
         </section>
       </div>
 
-      {topupOpen && (
+      {topupOpen && walletBalance != null && (
         <WalletTopup
           balance={walletBalance}
           busy={topupBusy}
@@ -1876,12 +1884,14 @@ function ConfirmStep({
   pickupLabel: string;
   dropLabel: string;
 }) {
+  // The RIDEHER server only accepts CASH | CARD | UPI for a ride — it rejects
+  // WALLET — so the Wallet tile appears only when the wallet balance endpoint
+  // actually answers. With no wallet on the server this stays hidden and UPI is
+  // the default.
   const methods: { id: Payment; label: string; sub: string }[] = [
-    {
-      id: "wallet",
-      label: "Wallet",
-      sub: walletBalance != null ? `₹${walletBalance} balance` : "RIDEHER wallet",
-    },
+    ...(walletBalance != null
+      ? [{ id: "wallet" as Payment, label: "Wallet", sub: `₹${walletBalance} balance` }]
+      : []),
     { id: "upi", label: "UPI", sub: "Scan QR / UPI app" },
     { id: "card", label: "Card", sub: "Secure checkout" },
     { id: "cash", label: "Cash", sub: "Pay on drop" },
