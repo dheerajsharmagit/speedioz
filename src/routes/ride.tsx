@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
 import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide } from "@/lib/booking";
 import { RequireRole } from "@/components/rc/RequireRole";
@@ -1509,7 +1509,10 @@ function RidePage() {
 
           {step === "matched" && ride && (
             <>
-              <MatchedStep ride={ride} />
+              <MatchedStep
+                ride={ride}
+                cancelSlot={<CancelAcceptedRide onConfirm={cancelBeforeStart} />}
+              />
               <RideSafety ride={ride} />
             </>
           )}
@@ -1526,9 +1529,7 @@ function RidePage() {
             />
           )}
 
-          {(step === "matched" || step === "arriving") && ride && (
-            <CancelAcceptedRide onConfirm={cancelBeforeStart} />
-          )}
+          {step === "arriving" && ride && <CancelAcceptedRide onConfirm={cancelBeforeStart} />}
 
           {step === "inprogress" && ride && (
             <RideStatusStep
@@ -2077,7 +2078,7 @@ function SearchingStep({
 }
 
 /* ---------- Matched ---------- */
-function MatchedStep({ ride }: { ride: Ride }) {
+function MatchedStep({ ride, cancelSlot }: { ride: Ride; cancelSlot?: ReactNode }) {
   // Animate captain toward pickup after matching
   useCaptainToPickup(ride);
   return (
@@ -2174,6 +2175,8 @@ function MatchedStep({ ride }: { ride: Ride }) {
           </a>
         </div>
       </div>
+
+      {cancelSlot}
     </>
   );
 }
