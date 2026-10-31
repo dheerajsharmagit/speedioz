@@ -2494,6 +2494,8 @@ function PaymentStep({
   onSwitch: () => void;
   onCancel: () => void;
 }) {
+  const createOrderFn = useServerFn(createRazorpayPayment);
+  const confirmFn = useServerFn(confirmRazorpayPayment);
   const [fallbackExpiry] = useState(() => new Date(Date.now() + 15 * 60 * 1000).toISOString());
   const expiresAt = intent.metadata?.expiresAt ?? fallbackExpiry;
   const [left, setLeft] = useState(() => secondsUntil(expiresAt));
