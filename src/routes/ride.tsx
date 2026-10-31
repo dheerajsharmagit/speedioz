@@ -1376,8 +1376,6 @@ function RidePage() {
                 quoteError ||
                 fareQuotes[selected as keyof typeof fareQuotes] == null
               }
-              walletShortfall={walletShortfall}
-              onAddMoney={() => setTopupOpen(true)}
               routeInfo={routeInfo}
               pickupLabel={pickup.label}
               dropLabel={dest?.addr ?? ""}
