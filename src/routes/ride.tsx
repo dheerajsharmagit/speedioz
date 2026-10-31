@@ -2499,6 +2499,8 @@ function PaymentStep({
   const [left, setLeft] = useState(() => secondsUntil(expiresAt));
   const [status, setStatus] = useState<PaymentStatus>("PENDING");
   const [busy, setBusy] = useState(false);
+  const [rzBusy, setRzBusy] = useState(false);
+  const paidLocallyRef = useRef(false);
   const expired = left <= 0 || status === "EXPIRED";
 
   useEffect(() => {
@@ -2511,6 +2513,8 @@ function PaymentStep({
     if (status === "PAID") return;
     let cancelled = false;
     const check = async () => {
+      // A verified Razorpay payment decides the outcome; ignore backend lag.
+      if (paidLocallyRef.current) return;
       try {
         const s = await paymentApi.forRide(rideId);
         if (cancelled) return;
