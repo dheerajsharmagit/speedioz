@@ -15,7 +15,6 @@ import {
   rideApi,
   storage,
   vehicleTypesApi,
-  walletApi,
   type BookingDetails,
   type CanonicalRide,
   type VehicleTypeId,
@@ -27,7 +26,6 @@ import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
 import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus } from "@/lib/api";
 import {
-  defaultPaymentMethod,
   needsOnlinePayment,
   secondsUntil,
   toServerPayment,
@@ -289,7 +287,7 @@ function RidePage() {
   const [recenterKey, setRecenterKey] = useState(0);
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
-  const [payment, setPayment] = useState<Payment>("upi");
+  const [payment, setPayment] = useState<Payment>("cash");
   const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
   const [recovering, setRecovering] = useState(true);
@@ -377,12 +375,6 @@ function RidePage() {
   const [vehicleAvailability, setVehicleAvailability] = useState<
     Partial<Record<"BIKE" | "AUTO" | "CAB", boolean>>
   >({});
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [walletShortfall, setWalletShortfall] = useState<{ balance: number; fare: number } | null>(
-    null,
-  );
-  const [topupOpen, setTopupOpen] = useState(false);
-  const [topupBusy, setTopupBusy] = useState(false);
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
   const [redispatching, setRedispatching] = useState(false);
   const [rateComment, setRateComment] = useState("");
@@ -484,11 +476,6 @@ function RidePage() {
   useEffect(() => {
     stepRef.current = step;
   }, [step]);
-  // Wallet is the default method whenever its balance covers the fare.
-  useEffect(() => {
-    if (paymentPickedRef.current) return;
-    setPayment(defaultPaymentMethod(walletBalance, fare));
-  }, [walletBalance, fare]);
 
   // Real-time ride updates via Socket.IO
   useEffect(() => {
@@ -783,27 +770,6 @@ function RidePage() {
     };
   }, []);
 
-  // Wallet balance is checked before booking so a low balance shows a friendly
-  // top-up prompt instead of a raw server error after submission.
-  useEffect(() => {
-    if (step !== "confirm" || !storage.getAccessToken()) return;
-    let cancelled = false;
-    setWalletShortfall(null);
-    walletApi
-      .get()
-      .then((wallet) => {
-        if (cancelled) return;
-        setWalletBalance(wallet.balance);
-        if (wallet.balance >= fare) setWalletShortfall(null);
-      })
-      .catch(() => {
-        if (!cancelled) setWalletBalance(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, fare]);
 
   useEffect(() => {
     if (!storage.getAccessToken()) return;
@@ -838,12 +804,6 @@ function RidePage() {
       setStep("destination");
       return;
     }
-    // Wallet pre-check: never submit a booking the balance can't cover.
-    if (payment === "wallet" && walletBalance != null && walletBalance < fare) {
-      setWalletShortfall({ balance: walletBalance, fare });
-      return;
-    }
-    setWalletShortfall(null);
     // Same key on network retries so the server never books twice.
     if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     setCreating(true);
@@ -877,16 +837,6 @@ function RidePage() {
       console.error(e);
       const apiError = e instanceof RequestError ? e.error : undefined;
       const code = apiError?.code;
-      // The server can still reject the booking for a low wallet — show the
-      // same friendly top-up prompt instead of the raw error string.
-      const errText = `${code ?? ""} ${apiError?.message ?? ""}`.toLowerCase();
-      if (
-        (errText.includes("wallet") && errText.includes("balance")) ||
-        errText.includes("insufficient")
-      ) {
-        setWalletShortfall({ balance: walletBalance ?? 0, fare });
-        return;
-      }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
@@ -899,56 +849,6 @@ function RidePage() {
 
   const createRazorpayOrderFn = useServerFn(createRazorpayPayment);
   const confirmRazorpayPaymentFn = useServerFn(confirmRazorpayPayment);
-
-  // Wallet top-up: pay through Razorpay test checkout, then credit the wallet
-  // on the RIDEHER backend once the payment verifies.
-  async function handleTopup(amount: number) {
-    setTopupBusy(true);
-    try {
-      const order = await createRazorpayOrderFn({
-        data: { amount, description: "RIDEHER wallet top-up" },
-      });
-      if (!order.ok) {
-        alert("Payment checkout isn't available right now. Please try again shortly.");
-        return;
-      }
-      let paid;
-      try {
-        paid = await openRazorpayCheckout({
-          keyId: order.keyId,
-          orderId: order.orderId,
-          amount: order.amount,
-          name: "RIDEHER",
-          description: "Wallet top-up",
-        });
-      } catch (e) {
-        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
-        throw e;
-      }
-      const check = await confirmRazorpayPaymentFn({
-        data: {
-          orderId: paid.razorpay_order_id,
-          paymentId: paid.razorpay_payment_id,
-          signature: paid.razorpay_signature,
-          expectedAmount: order.amount,
-        },
-      });
-      if (!check.ok) {
-        alert(
-          "We couldn't verify the payment. If money was debited, it will be refunded automatically.",
-        );
-        return;
-      }
-      const { balance } = await walletApi.topup(amount);
-      setWalletBalance(balance);
-      setTopupOpen(false);
-    } catch (e) {
-      console.error("Wallet top-up failed", e);
-      alert("Couldn't complete the top-up. Please try again.");
-    } finally {
-      setTopupBusy(false);
-    }
-  }
 
   function onPaid() {
     awaitingPaymentRef.current = false;
@@ -1466,12 +1366,7 @@ function RidePage() {
               useSmartRoute={useSmartRoute}
               smartSavings={smartSavings}
               payment={payment}
-              setPayment={(p) => {
-                paymentPickedRef.current = true;
-                setPayment(p);
-                setWalletShortfall(null);
-              }}
-              walletBalance={walletBalance}
+              setPayment={setPayment}
               onNext={createRide}
               busy={
                 creating ||
@@ -1578,14 +1473,6 @@ function RidePage() {
       </div>
       <RoleNav />
 
-      {topupOpen && (
-        <WalletTopup
-          balance={walletBalance}
-          busy={topupBusy}
-          onClose={() => setTopupOpen(false)}
-          onTopup={handleTopup}
-        />
-      )}
     </div>
   );
 }
@@ -1858,11 +1745,7 @@ function ConfirmStep({
   routeInfo,
   pickupLabel,
   dropLabel,
-  walletShortfall,
-  onAddMoney,
-  walletBalance,
 }: {
-  walletBalance: number | null;
   vehicle: Vehicle;
   fare: number;
   useSmartRoute: boolean;
@@ -1871,20 +1754,12 @@ function ConfirmStep({
   setPayment: (p: Payment) => void;
   onNext: () => void;
   busy: boolean;
-  walletShortfall: { balance: number; fare: number } | null;
-  onAddMoney: () => void;
   routeInfo: { distanceMeters: number; durationSeconds: number } | null;
   pickupLabel: string;
   dropLabel: string;
 }) {
+  // Cash is the only booking method — the wallet option is retired.
   const methods: { id: Payment; label: string; sub: string }[] = [
-    {
-      id: "wallet",
-      label: "Wallet",
-      sub: walletBalance != null ? `₹${walletBalance} balance` : "RIDEHER wallet",
-    },
-    { id: "upi", label: "UPI", sub: "Scan QR / UPI app" },
-    { id: "card", label: "Card", sub: "Secure checkout" },
     { id: "cash", label: "Cash", sub: "Pay on drop" },
   ];
   return (
@@ -1948,22 +1823,6 @@ function ConfirmStep({
         </div>
       </div>
 
-      {walletShortfall && (
-        <div className="mb-4 px-6">
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
-            <p className="text-sm font-semibold">
-              Your wallet balance (₹{walletShortfall.balance}) is not enough for this ride
-              (estimated ₹{walletShortfall.fare}). Please add money to your wallet.
-            </p>
-            <button
-              onClick={onAddMoney}
-              className="mt-3 h-11 w-full rounded-full bg-primary text-sm font-bold text-secondary"
-            >
-              Add money
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="mb-6 px-6">
         <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -2009,9 +1868,7 @@ function ConfirmStep({
           {busy ? "Requesting…" : `Book · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {payment === "upi" || payment === "card"
-            ? "You'll pay before we find your captain"
-            : "OTP shared with captain on pickup"}
+          OTP shared with captain on pickup
         </p>
       </div>
     </>
@@ -2399,81 +2256,6 @@ function RatingStep({
         </button>
       </div>
     </>
-  );
-}
-
-/* ---------- Wallet top-up ---------- */
-function WalletTopup({
-  balance,
-  busy,
-  onClose,
-  onTopup,
-}: {
-  balance: number | null;
-  busy: boolean;
-  onClose: () => void;
-  onTopup: (amount: number) => void;
-}) {
-  const [amount, setAmount] = useState("200");
-  const presets = [100, 200, 500];
-  const parsed = Number(amount);
-  const valid = Number.isFinite(parsed) && parsed >= 10 && parsed <= 10000;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add money to wallet"
-    >
-      <div
-        className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-extrabold tracking-tight">Add money</h3>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-9 w-9 place-items-center rounded-full border border-border text-sm"
-          >
-            ✕
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {balance != null ? `Current balance: ₹${balance}` : "Loading your balance…"}
-        </p>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {presets.map((p) => (
-            <button
-              key={p}
-              onClick={() => setAmount(String(p))}
-              className={`h-12 rounded-2xl border text-sm font-bold transition ${
-                Number(amount) === p
-                  ? "border-foreground bg-secondary text-secondary-foreground"
-                  : "border-border bg-background"
-              }`}
-            >
-              ₹{p}
-            </button>
-          ))}
-        </div>
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          inputMode="decimal"
-          placeholder="Custom amount (₹10 – ₹10,000)"
-          className="mt-3 h-12 w-full rounded-2xl border border-border bg-background px-4 text-sm font-bold outline-none focus:border-foreground/40"
-        />
-        <button
-          disabled={!valid || busy}
-          onClick={() => onTopup(parsed)}
-          className="mt-4 h-14 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-50"
-        >
-          {busy ? "Adding…" : `Add ₹${valid ? parsed : 0}`}
-        </button>
-      </div>
-    </div>
   );
 }
 
