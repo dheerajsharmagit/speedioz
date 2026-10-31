@@ -28,6 +28,11 @@ export function RoleNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    const interval = setInterval(() => setUser(storage.getUser()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
 
   const logout = async () => {
     try {
