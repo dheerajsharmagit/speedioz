@@ -1509,7 +1509,10 @@ function RidePage() {
 
           {step === "matched" && ride && (
             <>
-              <MatchedStep ride={ride} />
+              <MatchedStep
+                ride={ride}
+                cancelSlot={<CancelAcceptedRide onConfirm={cancelBeforeStart} />}
+              />
               <RideSafety ride={ride} />
             </>
           )}
@@ -1526,9 +1529,7 @@ function RidePage() {
             />
           )}
 
-          {(step === "matched" || step === "arriving") && ride && (
-            <CancelAcceptedRide onConfirm={cancelBeforeStart} />
-          )}
+          {step === "arriving" && ride && <CancelAcceptedRide onConfirm={cancelBeforeStart} />}
 
           {step === "inprogress" && ride && (
             <RideStatusStep
