@@ -35,7 +35,7 @@ function SettingsPage() {
       .then(({ user }) => setUser(user))
       .catch(() => setStatusError(true));
   }, []);
-  const customerStatus = user ? (user.isSuspended ? "SUSPENDED" : "ACTIVE") : "UNKNOWN";
+  const customerStatus: "ACTIVE" | "SUSPENDED" | "UNKNOWN" = user ? "ACTIVE" : "UNKNOWN";
 
   return (
     <div className="min-h-screen flex flex-col bg-background pb-4">

@@ -33,7 +33,7 @@ export type AuthUser = {
   address?: string;
   latitude?: number;
   longitude?: number;
-  isSuspended: boolean;
+  isSuspended?: boolean;
 };
 
 export type SavedPlace = {
