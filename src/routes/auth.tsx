@@ -33,7 +33,7 @@ function AuthPage() {
 
   useEffect(() => {
     const user = storage.getUser();
-    if (user && storage.getAccessToken() && user.role === "CUSTOMER" && !user.isSuspended) {
+    if (user && storage.getAccessToken() && user.role === "CUSTOMER") {
       navigate({ to: "/ride" });
     }
   }, [navigate]);
@@ -58,8 +58,8 @@ function AuthPage() {
       }
 
       const authRes = await authApi.signupGoogle(session.access_token);
-      if (authRes.user.role !== "CUSTOMER" || authRes.user.isSuspended)
-        throw new Error("Please sign in with an active customer account.");
+      if (authRes.user.role !== "CUSTOMER")
+        throw new Error("Please sign in with a customer account.");
       storage.saveAuth(authRes);
       await router.invalidate();
       navigate({ to: "/ride" });
@@ -90,8 +90,8 @@ function AuthPage() {
         authRes = await authApi.login({ email: email.trim(), password, expectedRole: "CUSTOMER" });
       }
 
-      if (authRes.user.role !== "CUSTOMER" || authRes.user.isSuspended)
-        throw new Error("Please sign in with an active customer account.");
+      if (authRes.user.role !== "CUSTOMER")
+        throw new Error("Please sign in with a customer account.");
       storage.saveAuth(authRes);
       await router.invalidate();
       navigate({ to: "/ride" });
