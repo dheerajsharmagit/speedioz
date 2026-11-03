@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
 import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide } from "@/lib/booking";
-import { RequireRole } from "@/components/rc/RequireRole";
+import { authApi } from "@/lib/api";
 import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
@@ -40,6 +40,43 @@ import {
   openRazorpayCheckout,
 } from "@/lib/razorpay";
 
+// Customer-only gate: this app is the customer section, so anyone not signed
+// in is sent straight to the login page instead of an "account required" screen.
+function CustomerGate({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    if (!storage.getAccessToken()) {
+      navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+      return;
+    }
+    authApi
+      .me()
+      .then(({ user }) => {
+        if (disposed) return;
+        storage.saveUser(user);
+        setSignedIn(true);
+      })
+      .catch(() => {
+        if (disposed) return;
+        // Session invalid or expired: go straight to login.
+        navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [navigate]);
+
+  if (signedIn) return children;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/ride")({
   head: () => ({
     meta: [
@@ -51,9 +88,9 @@ export const Route = createFileRoute("/ride")({
     ],
   }),
   component: () => (
-    <RequireRole role="CUSTOMER">
+    <CustomerGate>
       <RidePage />
-    </RequireRole>
+    </CustomerGate>
   ),
 });
 
