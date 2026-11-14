@@ -388,12 +388,20 @@ export type RideRequest = {
 };
 
 export type PaymentMethodId = "CASH" | "CARD" | "UPI" | "WALLET";
-export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "EXPIRED";
+export type PaymentStatus = "PENDING" | "AUTHORIZED" | "PAID" | "FAILED" | "REFUNDED" | "EXPIRED";
 
 export type PaymentIntent = {
   id?: string;
+  provider?: string;
+  providerIntentId?: string;
+  keyId?: string;
+  publicKey?: string;
+  orderId?: string;
+  amount?: number;
+  currency?: string;
+  mode?: "test" | "live";
   status?: PaymentStatus;
-  metadata?: { qrCode?: string; upiIntent?: string; checkoutUrl?: string; expiresAt?: string };
+  metadata?: { keyId?: string; publicKey?: string; orderId?: string; amount?: number; currency?: string; mode?: "test" | "live"; qrCode?: string; upiIntent?: string; checkoutUrl?: string; expiresAt?: string };
 };
 
 export type RideHistoryItem = {
@@ -405,6 +413,8 @@ export type RideHistoryItem = {
   fareFinal?: number | null;
   paymentMethod?: PaymentMethodId;
   paymentStatus?: PaymentStatus;
+  paymentMode?: "test" | "live" | "unknown";
+  paymentProvider?: string | null;
   paymentIntents?: PaymentIntent[];
   vehicleType?: string;
   distanceMeters?: number;
@@ -428,13 +438,17 @@ export function normalizePaymentStatus(res: any): PaymentStatus {
   if (raw === "PAID" || raw === "SUCCEEDED" || raw === "SUCCESS" || raw === "CAPTURED")
     return "PAID";
   if (raw === "FAILED") return "FAILED";
+  if (raw === "REFUNDED") return "REFUNDED";
   if (raw === "EXPIRED") return "EXPIRED";
   return "PENDING";
 }
 
+export type PaymentConfiguration = { provider: string; configured: boolean; mode: "test" | "live" | "unconfigured"; onlineMethods: string[] };
 export const paymentApi = {
-  forRide: async (rideId: string) =>
-    normalizePaymentStatus(await api<any>(`/payments/ride/${rideId}`)),
+  configuration: async (): Promise<PaymentConfiguration> => (await api<{ data: PaymentConfiguration }>("/payments/config")).data,
+  forRide: async (rideId: string) => normalizePaymentStatus(await api<any>(`/payments/ride/${rideId}`)),
+  prepare: async (rideId: string, paymentMethod: "UPI" | "CARD"): Promise<PaymentIntent> => (await api<{ data: PaymentIntent }>("/payments/intent", { method: "POST", body: JSON.stringify({ rideId, paymentMethod }) })).data,
+  confirm: async (body: { rideId: string; providerIntentId: string; paymentId?: string; signature?: string }): Promise<PaymentStatus> => normalizePaymentStatus(await api<any>("/payments/confirm", { method: "POST", body: JSON.stringify(body) })),
 };
 
 export type CanonicalRide = RideRequest & {

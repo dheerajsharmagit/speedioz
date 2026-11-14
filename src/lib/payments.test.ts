@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { defaultPaymentMethod, needsOnlinePayment, secondsUntil } from "./payments";
+import {
+  defaultPaymentMethod,
+  needsOnlinePayment,
+  secondsUntil,
+  razorpayCheckoutDetails,
+  razorpayConfirmation,
+} from "./payments";
 import { normalizePaymentStatus } from "./api";
 
 describe("payment rules", () => {
@@ -26,5 +32,45 @@ describe("payment rules", () => {
     expect(normalizePaymentStatus({ data: { status: "PAID" } })).toBe("PAID");
     expect(normalizePaymentStatus({ status: "expired" })).toBe("EXPIRED");
     expect(normalizePaymentStatus({})).toBe("PENDING");
+    expect(normalizePaymentStatus({ data: { status: "REFUNDED" } })).toBe("REFUNDED");
+  });
+  it("uses the backend checkout amount and rejects incomplete or non-Razorpay orders", () => {
+    expect(
+      razorpayCheckoutDetails({
+        provider: "razorpay",
+        providerIntentId: "order_fixture",
+        amount: 6400,
+        currency: "INR",
+        metadata: { keyId: "rzp_test_fixture", mode: "test" },
+      }),
+    ).toMatchObject({ amount: 6400, orderId: "order_fixture", mode: "test" });
+    expect(() => razorpayCheckoutDetails({ provider: "razorpay", amount: 6400 })).toThrow(
+      "not ready",
+    );
+    expect(() =>
+      razorpayCheckoutDetails({
+        provider: "stripe",
+        orderId: "order_fixture",
+        keyId: "rzp_test_fixture",
+        amount: 6400,
+        currency: "INR",
+      }),
+    ).toThrow("not ready");
+  });
+  it("sends the server order and signed callback without a client-supplied fare", () => {
+    const callback = {
+      razorpay_order_id: "order_fixture",
+      razorpay_payment_id: "pay_fixture",
+      razorpay_signature: "signed",
+    };
+    expect(razorpayConfirmation("ride", "order_fixture", callback)).toEqual({
+      rideId: "ride",
+      providerIntentId: "order_fixture",
+      paymentId: "pay_fixture",
+      signature: "signed",
+    });
+    expect(() => razorpayConfirmation("ride", "order_other", callback)).toThrow(
+      "unexpected payment",
+    );
   });
 });

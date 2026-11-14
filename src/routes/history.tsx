@@ -78,6 +78,8 @@ function HistoryPage() {
                       <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold uppercase">
                         <span className="rounded-full bg-muted px-2 py-0.5">{statusLabel[r.status] ?? r.status}</span>
                         {r.paymentMethod && <span className="rounded-full bg-muted px-2 py-0.5">{r.paymentMethod}</span>}
+                        {r.paymentProvider === "razorpay" && <span className="rounded-full bg-muted px-2 py-0.5">Razorpay</span>}
+                        {r.paymentMode === "test" && <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-600">Test payment</span>}
                         {r.paymentStatus && (
                           <span className={`rounded-full px-2 py-0.5 ${r.paymentStatus === "PAID" ? "bg-primary/15 text-primary" : "bg-muted"}`}>{r.paymentStatus}</span>
                         )}

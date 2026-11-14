@@ -1,8 +1,10 @@
-// The RIDEHER backend (api.rideher.in) does not send CORS headers, so browsers
-// block direct calls from this app. We proxy them server-side instead. The
+// Retry unavailable direct connections through this same-origin server proxy. The
 // caller's own bearer token is forwarded unchanged — the backend still performs
 // all authentication and authorization; this route grants no extra access.
-const UPSTREAM = "https://api.rideher.in/api/v1";
+function upstreamBase() {
+  const base = (process.env["RIDEHER_API_BASE_URL"] ?? process.env["VITE_EXTERNAL_API_URL"] ?? "https://api.rideher.in/api/v1").replace(/\/+$/, "");
+  return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
+}
 
 export async function proxy({
   request,
@@ -13,7 +15,7 @@ export async function proxy({
 }) {
   const rest = params["_splat"] ?? "";
   const url = new URL(request.url);
-  const target = `${UPSTREAM}/${rest}${url.search}`;
+  const target = `${upstreamBase()}/${rest}${url.search}`;
 
   const headers = new Headers();
   const auth = request.headers.get("authorization");

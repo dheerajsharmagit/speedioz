@@ -24,17 +24,13 @@ import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
-import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus } from "@/lib/api";
+import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus, type PaymentConfiguration } from "@/lib/api";
 import {
   needsOnlinePayment,
-  secondsUntil,
+  razorpayCheckoutDetails,
+  razorpayConfirmation,
   toServerPayment,
 } from "@/lib/payments";
-import { useServerFn } from "@tanstack/react-start";
-import {
-  confirmRazorpayPayment,
-  createRazorpayPayment,
-} from "@/lib/razorpay.functions";
 import {
   RAZORPAY_CHECKOUT_DISMISSED,
   openRazorpayCheckout,
@@ -325,6 +321,12 @@ function RidePage() {
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("cash");
+  const [gateway, setGateway] = useState<PaymentConfiguration | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    paymentApi.configuration().then(config => { if (!stopped) setGateway(config); }).catch(() => { if (!stopped) setGateway({ provider: "razorpay", configured: false, mode: "unconfigured", onlineMethods: [] }); });
+    return () => { stopped = true; };
+  }, []);
   const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
   const [recovering, setRecovering] = useState(true);
@@ -874,16 +876,17 @@ function RidePage() {
       console.error(e);
       const apiError = e instanceof RequestError ? e.error : undefined;
       const code = apiError?.code;
-      // Cash is the only booking method. Some ride-server builds still require
-      // a wallet balance before accepting cash — surface that clearly instead
-      // of the raw server string.
-      const errText = `${code ?? ""} ${apiError?.message ?? ""}`.toLowerCase();
-      if (errText.includes("wallet") || errText.includes("insufficient")) {
-        alert(
-          "Cash booking isn't being accepted right now: the ride server requires a wallet balance for cash rides. Please try again later.",
-        );
-        return;
-      }
+      try {
+        const active = await loadCustomerActiveRide();
+        if (active?.history.status === "SEARCHING" && ["UPI", "CARD"].includes(active.history.paymentMethod ?? "")) {
+          setRide(toClientRide(active.details));
+          setPayment(active.history.paymentMethod === "CARD" ? "card" : "upi");
+          setPaymentIntent(active.history.paymentIntents?.[0] ?? {});
+          awaitingPaymentRef.current = true;
+          setStep("payment");
+          return;
+        }
+      } catch { /* Preserve the original booking error if recovery is unavailable. */ }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
@@ -894,8 +897,6 @@ function RidePage() {
     }
   }
 
-  const createRazorpayOrderFn = useServerFn(createRazorpayPayment);
-  const confirmRazorpayPaymentFn = useServerFn(confirmRazorpayPayment);
 
   function onPaid() {
     awaitingPaymentRef.current = false;
@@ -1414,6 +1415,7 @@ function RidePage() {
               smartSavings={smartSavings}
               payment={payment}
               setPayment={setPayment}
+              gateway={gateway}
               onNext={createRide}
               busy={
                 creating ||
@@ -1433,7 +1435,7 @@ function RidePage() {
             <PaymentStep
               rideId={ride.id}
               method={payment}
-              fare={fare}
+              fare={ride.fare_inr}
               intent={paymentIntent}
               onPaid={onPaid}
               onRetry={retryPayment}
@@ -1790,6 +1792,7 @@ function ConfirmStep({
   routeInfo,
   pickupLabel,
   dropLabel,
+  gateway,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -1802,10 +1805,14 @@ function ConfirmStep({
   routeInfo: { distanceMeters: number; durationSeconds: number } | null;
   pickupLabel: string;
   dropLabel: string;
+  gateway: PaymentConfiguration | null;
 }) {
-  // Cash is the only booking method — the wallet option is retired.
   const methods: { id: Payment; label: string; sub: string }[] = [
     { id: "cash", label: "Cash", sub: "Pay on drop" },
+    ...(gateway?.configured && gateway.provider === "razorpay" ? [
+      { id: "upi" as const, label: "UPI", sub: "Razorpay secure checkout" },
+      { id: "card" as const, label: "Card", sub: "Razorpay secure checkout" },
+    ] : []),
   ];
   return (
     <>
@@ -1873,6 +1880,8 @@ function ConfirmStep({
         <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           Payment
         </p>
+        {gateway?.mode === "test" && needsOnlinePayment(payment) && <p className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs">Test checkout: no real money will be collected.</p>}
+        {gateway && !gateway.configured && <p className="mb-3 text-xs text-muted-foreground">Online payments are currently unavailable. You can pay cash.</p>}
         <div
           role="radiogroup"
           aria-label="Payment method"
@@ -2305,219 +2314,95 @@ function RatingStep({
 }
 
 /* ---------- Online payment (UPI / Card) ---------- */
-function PaymentStep({
-  rideId,
-  method,
-  fare,
-  intent,
-  onPaid,
-  onRetry,
-  onSwitch,
-  onCancel,
-}: {
-  rideId: string;
-  method: Payment;
-  fare: number;
-  intent: PaymentIntent;
-  onPaid: () => void;
-  onRetry: () => void;
-  onSwitch: () => void;
-  onCancel: () => void;
+function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, onCancel }: {
+  rideId: string; method: Payment; fare: number; intent: PaymentIntent;
+  onPaid: () => void; onRetry: () => void; onSwitch: () => void; onCancel: () => void;
 }) {
-  const createOrderFn = useServerFn(createRazorpayPayment);
-  const confirmFn = useServerFn(confirmRazorpayPayment);
-  const [fallbackExpiry] = useState(() => new Date(Date.now() + 15 * 60 * 1000).toISOString());
-  const expiresAt = intent.metadata?.expiresAt ?? fallbackExpiry;
-  const [left, setLeft] = useState(() => secondsUntil(expiresAt));
-  const [status, setStatus] = useState<PaymentStatus>("PENDING");
+  const [status, setStatus] = useState<PaymentStatus>(intent.status ?? "PENDING");
   const [busy, setBusy] = useState(false);
-  const [rzBusy, setRzBusy] = useState(false);
-  const paidLocallyRef = useRef(false);
-  const expired = left <= 0 || status === "EXPIRED";
+  const [error, setError] = useState("");
+  const [checkoutIntent, setCheckoutIntent] = useState(intent);
+  const paidRef = useRef(false);
+  const busyRef = useRef(false);
+  const onPaidRef = useRef(onPaid);
+  onPaidRef.current = onPaid;
+  const isTest = (checkoutIntent.mode ?? checkoutIntent.metadata?.mode) === "test";
+  const amount = checkoutIntent.amount ?? checkoutIntent.metadata?.amount;
+  const displayFare = amount != null ? amount / 100 : fare;
 
-  useEffect(() => {
-    const id = window.setInterval(() => setLeft(secondsUntil(expiresAt)), 1000);
-    return () => window.clearInterval(id);
-  }, [expiresAt]);
-
-  // Poll every 3s until paid; webhooks can be delayed, so keep checking.
-  useEffect(() => {
-    if (status === "PAID") return;
-    let cancelled = false;
-    const check = async () => {
-      // A verified Razorpay payment decides the outcome; ignore backend lag.
-      if (paidLocallyRef.current) return;
-      try {
-        const s = await paymentApi.forRide(rideId);
-        if (cancelled) return;
-        setStatus(s);
-        if (s === "PAID") onPaid();
-      } catch (e) {
-        console.warn("Payment status check failed", e);
-      }
-    };
-    void check();
-    const id = window.setInterval(check, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rideId, expired, status]);
-
-  // Pay through Razorpay test checkout (UPI / card / netbanking). On success
-  // the signature is verified server-side before the ride proceeds.
-  async function payWithRazorpay() {
-    setRzBusy(true);
-    try {
-      const order = await createOrderFn({
-        data: { amount: fare, description: `RIDEHER ride ${rideId}` },
-      });
-      if (!order.ok) throw new Error(order.error);
-      let paid;
-      try {
-        paid = await openRazorpayCheckout({
-          keyId: order.keyId,
-          orderId: order.orderId,
-          amount: order.amount,
-          name: "RIDEHER",
-          description: "Ride fare",
-        });
-      } catch (e) {
-        if ((e as Error)?.message === RAZORPAY_CHECKOUT_DISMISSED) return;
-        throw e;
-      }
-      const check = await confirmFn({
-        data: {
-          orderId: paid.razorpay_order_id,
-          paymentId: paid.razorpay_payment_id,
-          signature: paid.razorpay_signature,
-          expectedAmount: order.amount,
-        },
-      });
-      if (!check.ok) throw new Error(check.error);
-      paidLocallyRef.current = true;
-      setStatus("PAID");
-      onPaid();
-    } catch (e) {
-      console.error("Razorpay payment failed", e);
-      setStatus("FAILED");
-    } finally {
-      setRzBusy(false);
-    }
+  function applyStatus(next: PaymentStatus) {
+    setStatus(next);
+    if (next === "PAID" && !paidRef.current) { paidRef.current = true; onPaidRef.current(); }
   }
+  useEffect(() => {
+    let stopped = false, checking = false;
+    let lastReconcile = Date.now();
+    const poll = async () => {
+      if (stopped || checking || paidRef.current || busyRef.current) return;
+      checking = true;
+      try {
+        let next = await paymentApi.forRide(rideId);
+        if (next === "PENDING" && intent.providerIntentId?.startsWith("order_") && Date.now() - lastReconcile >= 15000) {
+          lastReconcile = Date.now();
+          next = await paymentApi.confirm({ rideId, providerIntentId: intent.providerIntentId });
+        }
+        if (!stopped) applyStatus(next);
+      } catch { /* Retain the pending state; never infer success from a network failure. */ }
+      finally { checking = false; }
+    };
+    void poll();
+    const timer = window.setInterval(poll, 5000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [rideId, intent.providerIntentId]);
 
-  const mm = String(Math.floor(left / 60)).padStart(2, "0");
-  const ss = String(left % 60).padStart(2, "0");
-  const qr = intent.metadata?.qrCode;
-  const upi = intent.metadata?.upiIntent;
-  const checkout = intent.metadata?.checkoutUrl;
-
-  return (
-    <>
-      <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {method === "card" ? "Card payment" : "UPI payment"}
-        </p>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{fare} to book</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          We'll find your captain as soon as payment is confirmed.
-        </p>
-      </div>
-
-      {status === "FAILED" && !expired && (
-        <div className="mx-6 mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold">
-          Payment failed. Try again or pick another method.
-        </div>
-      )}
-
-      {expired ? (
-        <div className="mx-6 mb-6 rounded-2xl border border-border bg-muted p-5 text-center">
-          <p className="text-base font-bold">Payment time ran out</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Check your payment app for any debit. Payment confirmation may be delayed.
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await onRetry();
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              className="h-12 rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60"
-            >
-              {busy ? "Retrying…" : "Retry"}
-            </button>
-            <button
-              onClick={onSwitch}
-              className="h-12 rounded-full border border-border bg-background text-sm font-bold"
-            >
-              Switch method
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
-          {qr ? (
-            <img
-              src={qr}
-              alt="Scan to pay with any UPI app"
-              className="mx-auto h-52 w-52 rounded-xl bg-background p-2"
-            />
-          ) : (
-            <div className="mx-auto grid h-24 w-full max-w-[13rem] place-items-center rounded-xl bg-muted px-4 text-xs text-muted-foreground">
-              Pay securely with UPI, card or netbanking below.
-            </div>
-          )}
-          <p className="mt-3 font-mono text-xs font-bold" aria-live="polite">
-            Expires in {mm}:{ss}
-          </p>
-          <div className="mt-4 grid gap-2">
-            <button
-              disabled={rzBusy || status === "PAID"}
-              onClick={payWithRazorpay}
-              className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-lg transition-transform active:scale-95 disabled:opacity-60"
-            >
-              {rzBusy ? "Opening secure checkout…" : `Pay ₹${fare} with UPI / Card`}
-            </button>
-            {upi && (
-              <a
-                href={upi}
-                className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-              >
-                Pay with UPI app
-              </a>
-            )}
-            {checkout && method === "card" && (
-              <a
-                href={checkout}
-                target="_blank"
-                rel="noreferrer"
-                className="grid h-12 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-              >
-                Open card checkout
-              </a>
-            )}
-          </div>
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for payment
-            confirmation…
-          </div>
-        </div>
-      )}
-
-      <div className="px-6 pb-6">
-        <button
-          onClick={onCancel}
-          className="h-12 w-full rounded-full border border-border bg-background text-sm font-bold"
-        >
-          Cancel booking
-        </button>
-      </div>
-    </>
-  );
+  async function checkStatus() {
+    setBusy(true); busyRef.current = true; setError("");
+    try {
+      const prepared = await paymentApi.prepare(rideId, method === "card" ? "CARD" : "UPI");
+      setCheckoutIntent(prepared);
+      const next = await paymentApi.confirm({ rideId, providerIntentId: prepared.providerIntentId! });
+      applyStatus(next);
+      if (next === "PENDING") setError("Payment is still pending. Check your payment app before retrying.");
+    } catch (error) { setError(error instanceof Error ? error.message : "Unable to verify payment. Please retry."); }
+    finally { setBusy(false); busyRef.current = false; }
+  }
+  async function payWithRazorpay() {
+    if (busyRef.current) return;
+    setBusy(true); busyRef.current = true; setError("");
+    try {
+      const prepared = await paymentApi.prepare(rideId, method === "card" ? "CARD" : "UPI");
+      setCheckoutIntent(prepared);
+      if (prepared.status === "PAID") { applyStatus("PAID"); return; }
+      const checkout = razorpayCheckoutDetails(prepared);
+      const user = storage.getUser();
+      const callback = await openRazorpayCheckout({ ...checkout, name: "RideHer", description: checkout.mode === "test" ? "Test ride payment" : "Ride payment", prefill: { name: user?.name, email: user?.email ?? undefined, contact: user?.phone ?? undefined } });
+      const next = await paymentApi.confirm(razorpayConfirmation(rideId, checkout.orderId, callback));
+      applyStatus(next);
+      if (next !== "PAID") setError("Your payment is being verified. We will continue when capture is confirmed.");
+    } catch (error) {
+      if (error instanceof Error && error.message === RAZORPAY_CHECKOUT_DISMISSED) return;
+      setError(error instanceof Error ? error.message : "Unable to complete payment. Check payment status before retrying.");
+    } finally { setBusy(false); busyRef.current = false; }
+  }
+  return <>
+    <div className="mb-4 px-6 text-center">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Secure Razorpay checkout</p>
+      <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{displayFare.toFixed(2)} to book</h2>
+      <p className="mt-1 text-xs text-muted-foreground">Your captain request starts after the payment is verified.</p>
+    </div>
+    <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 space-y-4">
+      {isTest && <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm">Test payment: no real money is collected.</p>}
+      <p className="text-center text-sm">Pay using UPI, cards or other methods enabled for this Razorpay account.</p>
+      <p className="text-center text-xs text-muted-foreground" role="status">Payment status: {status.toLowerCase()}</p>
+      {error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      {status === "REFUNDED" && <p className="text-sm">This payment has been refunded. Choose another method to make a new booking.</p>}
+      <button disabled={busy || status === "PAID" || status === "REFUNDED"} onClick={payWithRazorpay} className="h-12 w-full rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60">{busy ? "Please wait…" : `Pay ₹${displayFare.toFixed(2)}`}</button>
+      <button disabled={busy || status === "REFUNDED"} onClick={checkStatus} className="h-12 w-full rounded-full border border-border text-sm font-bold disabled:opacity-60">Check payment status</button>
+      <p className="text-xs text-muted-foreground">Closing checkout does not create another booking. Retry uses the same payment order.</p>
+    </div>
+    <div className="grid gap-2 px-6 pb-6">
+      <button disabled={busy} onClick={onSwitch} className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60">Change payment method</button>
+      <button disabled={busy} onClick={onCancel} className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60">Cancel booking</button>
+    </div>
+  </>;
 }
