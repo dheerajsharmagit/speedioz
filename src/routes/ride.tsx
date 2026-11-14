@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
 import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide } from "@/lib/booking";
 import { authApi } from "@/lib/api";
@@ -7,6 +8,7 @@ import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
+import { PaymentMethods } from "@/components/rc/PaymentMethods";
 import {
   RequestError,
   API_BASE_URL,
@@ -27,6 +29,7 @@ import { io, Socket } from "socket.io-client";
 import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus, type PaymentConfiguration } from "@/lib/api";
 import {
   needsOnlinePayment,
+  isPaymentMethodAvailable,
   razorpayCheckoutDetails,
   razorpayConfirmation,
   toServerPayment,
@@ -321,12 +324,17 @@ function RidePage() {
   const [destQuery, setDestQuery] = useState("");
   const [dest, setDest] = useState<PlaceResult | null>(null);
   const [payment, setPayment] = useState<Payment>("cash");
-  const [gateway, setGateway] = useState<PaymentConfiguration | null>(null);
-  useEffect(() => {
-    let stopped = false;
-    paymentApi.configuration().then(config => { if (!stopped) setGateway(config); }).catch(() => { if (!stopped) setGateway({ provider: "razorpay", configured: false, mode: "unconfigured", onlineMethods: [] }); });
-    return () => { stopped = true; };
-  }, []);
+  const gatewayQuery = useQuery({
+    queryKey: ["payment-configuration", storage.getUser()?.id],
+    queryFn: paymentApi.configuration,
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 15000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    refetchInterval: step === "confirm" ? 15000 : false,
+  });
+  const gateway = gatewayQuery.data ?? null;
   const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
   const [recovering, setRecovering] = useState(true);
@@ -834,6 +842,10 @@ function RidePage() {
       fareQuotes[selected as keyof typeof fareQuotes] == null
     )
       return;
+    if (!isPaymentMethodAvailable(payment, gateway)) {
+      void gatewayQuery.refetch();
+      return;
+    }
     if (!storage.getAccessToken()) {
       navigate({ to: "/auth", search: { mode: "signin" } });
       return;
@@ -1416,6 +1428,9 @@ function RidePage() {
               payment={payment}
               setPayment={setPayment}
               gateway={gateway}
+              gatewayChecking={gatewayQuery.isFetching}
+              gatewayFailed={gatewayQuery.isError}
+              onRetryGateway={() => { void gatewayQuery.refetch(); }}
               onNext={createRide}
               busy={
                 creating ||
@@ -1793,6 +1808,9 @@ function ConfirmStep({
   pickupLabel,
   dropLabel,
   gateway,
+  gatewayChecking,
+  gatewayFailed,
+  onRetryGateway,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -1806,14 +1824,10 @@ function ConfirmStep({
   pickupLabel: string;
   dropLabel: string;
   gateway: PaymentConfiguration | null;
+  gatewayChecking: boolean;
+  gatewayFailed: boolean;
+  onRetryGateway: () => void;
 }) {
-  const methods: { id: Payment; label: string; sub: string }[] = [
-    { id: "cash", label: "Cash", sub: "Pay on drop" },
-    ...(gateway?.configured && gateway.provider === "razorpay" ? [
-      { id: "upi" as const, label: "UPI", sub: "Razorpay secure checkout" },
-      { id: "card" as const, label: "Card", sub: "Razorpay secure checkout" },
-    ] : []),
-  ];
   return (
     <>
       <div className="mb-4 px-6">
@@ -1876,50 +1890,22 @@ function ConfirmStep({
       </div>
 
 
-      <div className="mb-6 px-6">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Payment
-        </p>
-        {gateway?.mode === "test" && needsOnlinePayment(payment) && <p className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs">Test checkout: no real money will be collected.</p>}
-        {gateway && !gateway.configured && <p className="mb-3 text-xs text-muted-foreground">Online payments are currently unavailable. You can pay cash.</p>}
-        <div
-          role="radiogroup"
-          aria-label="Payment method"
-          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-        >
-          {methods.map((m) => {
-            const active = m.id === payment;
-            return (
-              <button
-                key={m.id}
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPayment(m.id)}
-                className={`rounded-2xl border p-3 text-left transition ${
-                  active
-                    ? "border-foreground bg-secondary text-secondary-foreground"
-                    : "border-border bg-background"
-                }`}
-              >
-                <p className="text-sm font-bold">{m.label}</p>
-                <p
-                  className={`mt-1 text-[10px] ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}
-                >
-                  {m.sub}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <PaymentMethods
+        payment={payment}
+        onChange={setPayment}
+        configuration={gateway}
+        checking={gatewayChecking}
+        failed={gatewayFailed}
+        onRetry={onRetryGateway}
+      />
 
       <div className="px-6 pb-6">
         <button
           onClick={onNext}
-          disabled={busy}
+          disabled={busy || !isPaymentMethodAvailable(payment, gateway)}
           className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-60"
         >
-          {busy ? "Requesting…" : `Book · ₹${fare}`}
+          {busy ? "Requesting…" : needsOnlinePayment(payment) ? `Continue to pay · ₹${fare}` : `Book with cash · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           OTP shared with captain on pickup

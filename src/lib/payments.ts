@@ -10,6 +10,19 @@ export function needsOnlinePayment(method: ClientPayment): boolean {
   return method === "upi" || method === "card";
 }
 
+export function isPaymentMethodAvailable(
+  method: ClientPayment,
+  configuration: import("./api").PaymentConfiguration | null,
+): boolean {
+  if (method === "cash") return true;
+  return (
+    needsOnlinePayment(method) &&
+    configuration?.provider === "razorpay" &&
+    configuration.configured === true &&
+    configuration.onlineMethods.includes(method.toUpperCase())
+  );
+}
+
 export function toServerPayment(method: ClientPayment): "WALLET" | "UPI" | "CARD" | "CASH" {
   return method.toUpperCase() as "WALLET" | "UPI" | "CARD" | "CASH";
 }
