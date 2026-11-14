@@ -13,8 +13,11 @@ export function needsOnlinePayment(method: ClientPayment): boolean {
 export function isPaymentMethodAvailable(
   method: ClientPayment,
   configuration: import("./api").PaymentConfiguration | null,
+  walletBalance: number | null = null,
+  fare = 0,
 ): boolean {
   if (method === "cash") return true;
+  if (method === "wallet") return walletBalance !== null && Number.isFinite(walletBalance) && fare > 0 && walletBalance >= fare;
   return (
     needsOnlinePayment(method) &&
     configuration?.provider === "razorpay" &&

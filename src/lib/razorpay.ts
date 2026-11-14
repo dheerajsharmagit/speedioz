@@ -24,6 +24,7 @@ type RazorpayOptions = {
 
 type RazorpayInstance = {
   open: () => void;
+  close: () => void;
   on: (event: string, cb: (resp: unknown) => void) => void;
 };
 
@@ -84,9 +85,10 @@ export async function openRazorpayCheckout(opts: {
         ondismiss: () => reject(new Error(RAZORPAY_CHECKOUT_DISMISSED)),
       },
     });
-    rz.on("payment.failed", () =>
-      reject(new Error("Payment was not completed. Please try again or choose another method.")),
-    );
+    rz.on("payment.failed", () => {
+      reject(new Error("Payment was not completed. Please try again or choose another method."));
+      rz.close();
+    });
     rz.open();
   });
 }

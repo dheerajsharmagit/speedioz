@@ -2,13 +2,16 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
-import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide } from "@/lib/booking";
+import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide, canApplyRideProgress } from "@/lib/booking";
 import { authApi } from "@/lib/api";
 import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
 import { PaymentMethods } from "@/components/rc/PaymentMethods";
+import { WalletFunding, walletQueryKey } from "@/components/rc/WalletFunding";
+import { CustomerCollection } from "@/components/rc/CustomerCollection";
+import { PickupOtp, shouldShowPickupOtp } from "@/components/rc/PickupOtp";
 import {
   RequestError,
   API_BASE_URL,
@@ -17,6 +20,7 @@ import {
   rideApi,
   storage,
   vehicleTypesApi,
+  walletApi,
   type BookingDetails,
   type CanonicalRide,
   type VehicleTypeId,
@@ -271,11 +275,14 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
       (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab"
         ? "auto"
         : ((details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev"),
-    fare_inr: details.fareEstimate ?? ride.fareEstimate,
+    fare_inr: details.fareFinal ?? ride.fareFinal ?? details.fareEstimate ?? ride.fareEstimate,
     status: mapRideStatus(details.status ?? ride.status),
     // Keep the OTP returned at booking time while the matched-details poll is
     // in flight. It is deliberately not part of captain-facing responses.
     otp: details.otp ?? ride.otp ?? "",
+    paymentMethod: details.paymentMethod ?? ride.paymentMethod,
+    paymentStatus: details.paymentStatus ?? ride.paymentStatus,
+    fareBreakdown: details.fareBreakdown,
     captain_name: details.captain?.name,
     captain_phone: details.captain?.phone ?? undefined,
     captain_vehicle: details.captain?.vehicleModel ?? details.captain?.vehicleType ?? undefined,
@@ -335,6 +342,7 @@ function RidePage() {
     refetchInterval: step === "confirm" ? 15000 : false,
   });
   const gateway = gatewayQuery.data ?? null;
+  const walletQuery = useQuery({ queryKey: walletQueryKey(), queryFn: walletApi.details, refetchInterval: step === "confirm" ? 15000 : false });
   const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
   const [recovering, setRecovering] = useState(true);
@@ -541,6 +549,8 @@ function RidePage() {
         const response = await rideApi.bookingDetails(ride.id);
         if (disposed || cancellationRef.current) return;
         const updatedRide = toClientRide(response.data);
+        const next = stepFromStatus(updatedRide.status);
+        if (!canApplyRideProgress(stepRef.current, next)) return;
         // Some older API deployments omit the customer OTP from a later
         // booking-details response. Never let that refresh erase the OTP we
         // received when the customer created the ride or when it was matched.
@@ -548,7 +558,6 @@ function RidePage() {
           ...updatedRide,
           otp: updatedRide.otp || current?.otp || "",
         }));
-        const next = stepFromStatus(updatedRide.status);
         if (next === "cancelled") {
           awaitingPaymentRef.current = false;
           setPaymentIntent(null);
@@ -559,7 +568,7 @@ function RidePage() {
           if (next === "searching" && (prev === "matched" || prev === "arriving"))
             setRedispatching(true);
           if (next !== "searching") setRedispatching(false);
-          setStep(next);
+          if (!(prev === "rating" && next === "completed")) { stepRef.current = next; setStep(next); }
         }
         if (response.data.captainLocation) setCaptainPos(response.data.captainLocation);
       } catch (error) {
@@ -583,7 +592,7 @@ function RidePage() {
         };
         captainLocation?: { lat: number; lng: number } | null;
       }) => {
-        if (data.rideId !== ride.id) return;
+        if (data.rideId !== ride.id || !canApplyRideProgress(stepRef.current, "matched")) return;
         setRide((current) =>
           current
             ? {
@@ -632,6 +641,7 @@ function RidePage() {
     socket.on("ride:arriving", refreshBooking);
     socket.on("ride:started", refreshBooking);
     socket.on("ride:completed", refreshBooking);
+    socket.on("payment:updated", refreshBooking);
     socket.on("ride:cancelled", (data: { rideId?: string; status?: string }) => {
       if (data.rideId === ride.id) {
         awaitingPaymentRef.current = false;
@@ -842,8 +852,9 @@ function RidePage() {
       fareQuotes[selected as keyof typeof fareQuotes] == null
     )
       return;
-    if (!isPaymentMethodAvailable(payment, gateway)) {
+    if (!isPaymentMethodAvailable(payment, gateway, walletQuery.data?.balance ?? null, fare)) {
       void gatewayQuery.refetch();
+      void walletQuery.refetch();
       return;
     }
     if (!storage.getAccessToken()) {
@@ -888,6 +899,10 @@ function RidePage() {
       console.error(e);
       const apiError = e instanceof RequestError ? e.error : undefined;
       const code = apiError?.code;
+      if (code === "INSUFFICIENT_WALLET_BALANCE") {
+        void walletQuery.refetch();
+        setQuoteAttempt(value => value + 1);
+      }
       try {
         const active = await loadCustomerActiveRide();
         if (active?.history.status === "SEARCHING" && ["UPI", "CARD"].includes(active.history.paymentMethod ?? "")) {
@@ -941,6 +956,7 @@ function RidePage() {
     if (!(await confirmCancellation("Switching payment method"))) return;
     clearPendingRide();
     paymentPickedRef.current = false;
+    setPayment("cash");
     setStep("confirm");
   }
 
@@ -1431,6 +1447,7 @@ function RidePage() {
               gatewayChecking={gatewayQuery.isFetching}
               gatewayFailed={gatewayQuery.isError}
               onRetryGateway={() => { void gatewayQuery.refetch(); }}
+              walletBalance={walletQuery.data?.balance ?? null}
               onNext={createRide}
               busy={
                 creating ||
@@ -1458,6 +1475,8 @@ function RidePage() {
               onCancel={cancelDuringPayment}
             />
           )}
+
+          {ride && shouldShowPickupOtp(step) && <PickupOtp otp={ride.otp} />}
 
           {step === "searching" && (
             <SearchingStep onCancel={cancelSearch} redispatching={redispatching} />
@@ -1811,6 +1830,7 @@ function ConfirmStep({
   gatewayChecking,
   gatewayFailed,
   onRetryGateway,
+  walletBalance,
 }: {
   vehicle: Vehicle;
   fare: number;
@@ -1827,6 +1847,7 @@ function ConfirmStep({
   gatewayChecking: boolean;
   gatewayFailed: boolean;
   onRetryGateway: () => void;
+  walletBalance: number | null;
 }) {
   return (
     <>
@@ -1897,15 +1918,17 @@ function ConfirmStep({
         checking={gatewayChecking}
         failed={gatewayFailed}
         onRetry={onRetryGateway}
+        walletBalance={walletBalance}
       />
+      {payment === "wallet" && <div className="mx-6 mb-5"><WalletFunding requiredFare={fare} /></div>}
 
       <div className="px-6 pb-6">
         <button
           onClick={onNext}
-          disabled={busy || !isPaymentMethodAvailable(payment, gateway)}
+          disabled={busy || !isPaymentMethodAvailable(payment, gateway, walletBalance, fare)}
           className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-60"
         >
-          {busy ? "Requesting…" : needsOnlinePayment(payment) ? `Continue to pay · ₹${fare}` : `Book with cash · ₹${fare}`}
+          {busy ? "Requesting…" : payment === "wallet" ? `Book with wallet · ₹${fare}` : `Pay at the end · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           OTP shared with captain on pickup
@@ -2024,33 +2047,6 @@ function MatchedStep({ ride, cancelSlot }: { ride: Ride; cancelSlot?: ReactNode 
               </a>
             )}
           </div>
-          <div className="my-3 h-px bg-border" />
-          <div>
-            <p className="font-mono text-[10px] uppercase text-muted-foreground">
-              Share OTP on pickup
-            </p>
-            {ride.otp && (
-              <p className="mt-1 text-3xl font-extrabold tracking-[0.3em] text-primary">
-                Share: {ride.otp}
-              </p>
-            )}
-            {ride.otp ? (
-              <div className="mt-2 flex gap-2">
-                {ride.otp.split("").map((d: string, i: number) => (
-                  <span
-                    key={i}
-                    className="grid h-11 w-9 place-items-center rounded-lg bg-secondary text-lg font-extrabold text-primary"
-                  >
-                    {d}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-xs font-semibold text-muted-foreground">
-                Securing your pickup OTP…
-              </p>
-            )}
-          </div>
         </div>
       </div>
 
@@ -2149,11 +2145,11 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
           <div className="mt-3 space-y-1 text-xs text-muted-foreground">
             <div className="flex justify-between">
               <span>Ride fare</span>
-              <span>₹{Math.round(fare * 0.95)}</span>
+              <span>{ride.fareBreakdown ? `₹${((ride.fareBreakdown.subtotalPaise ?? 0) / 100).toFixed(2)}` : "Included in total"}</span>
             </div>
             <div className="flex justify-between">
               <span>Taxes & fees</span>
-              <span>₹{fare - Math.round(fare * 0.95)}</span>
+              <span>{ride.fareBreakdown ? `₹${((ride.fareBreakdown.gstPaise ?? 0) / 100).toFixed(2)}` : "Included in total"}</span>
             </div>
           </div>
           <div className="my-4 h-px bg-border" />
@@ -2179,6 +2175,7 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
         </div>
       </div>
 
+      <CustomerCollection rideId={ride.id} />
       <div className="px-6 pb-8">
         <button
           onClick={onNext}

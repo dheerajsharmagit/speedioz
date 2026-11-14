@@ -456,6 +456,7 @@ export type CanonicalRide = RideRequest & {
   status: CanonicalRideStatus;
   fareEstimate: number;
   fareFinal?: number | null;
+  paymentStatus?: PaymentStatus;
   distanceMeters: number;
   durationSeconds: number;
   captainId?: string | null;
@@ -486,6 +487,10 @@ export type BookingDetails = {
   captainLocation: { lat: number; lng: number } | null;
   customer?: { name?: string; phone?: string | null } | null;
   otp?: string;
+  paymentMethod?: "CASH" | "CARD" | "UPI" | "WALLET";
+  paymentStatus?: PaymentStatus;
+  fareFinal?: number | null;
+  fareBreakdown?: Record<string, number> | null;
 };
 
 // User methods
@@ -604,6 +609,9 @@ function parseWalletBalance(res: any): number {
 
 export const walletApi = {
   get: async () => ({ balance: parseWalletBalance(await api<any>("/users/me/wallet")) }),
+  details: async (): Promise<CustomerWallet> => (await api<{ data: CustomerWallet }>("/users/me/wallet")).data,
+  createTopUp: async (amount: number, key: string): Promise<WalletTopUp> => (await api<{ data: WalletTopUp }>("/users/me/wallet/topups", { method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ amount }) })).data,
+  confirmTopUp: async (id: string, proof: { paymentId?: string; signature?: string } = {}): Promise<WalletTopUp> => (await api<{ data: WalletTopUp }>(`/users/me/wallet/topups/${encodeURIComponent(id)}/confirm`, { method: "POST", body: JSON.stringify(proof) })).data,
   topup: async (amount: number) => {
     const res = await api<any>("/users/me/wallet/topup", {
       method: "POST",
@@ -611,6 +619,15 @@ export const walletApi = {
     });
     return { balance: parseWalletBalance(res) };
   },
+};
+
+export type WalletTopUp = PaymentIntent & { id: string; amountPaise: number; mode: "test" | "live" };
+export type CustomerWallet = { balance: number; balancePaise: number; currency: string; mode: "test" | "live"; transactions: { id: string; type: "CREDIT" | "DEBIT"; source: string; amountPaise: number; balanceAfterPaise: number; createdAt: string; note?: string }[]; pendingTopUps: WalletTopUp[] };
+export type RideCollection = { rideId: string; paymentMethod: string; paymentStatus: PaymentStatus; amountPaise: number; currency: string; mode: string; qrCode: string | null; checkoutUrl: string | null; providerIntentId: string | null };
+export const collectionApi = {
+  get: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`)).data,
+  create: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`, { method: "POST", body: "{}" })).data,
+  reconcile: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}/reconcile`, { method: "POST", body: "{}" })).data,
 };
 
 // Availability per vehicle type (enabled per city/zone in the admin module).

@@ -1,8 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { rideApi, type CanonicalRide, type BookingDetails, type RideHistoryItem } from "./api";
-import { cancelRideConfirmed, loadCustomerActiveRide, cancelAcceptedRide } from "./booking";
+import { cancelRideConfirmed, loadCustomerActiveRide, cancelAcceptedRide, canApplyRideProgress } from "./booking";
 afterEach(() => vi.restoreAllMocks());
 describe("booking recovery and cancellation", () => {
+  it("rejects late pickup updates after the OTP has already started the trip", () => {
+    expect(canApplyRideProgress("inprogress", "arriving")).toBe(false);
+    expect(canApplyRideProgress("completed", "matched")).toBe(false);
+    expect(canApplyRideProgress("rating", "inprogress")).toBe(false);
+    expect(canApplyRideProgress("matched", "arriving")).toBe(true);
+    expect(canApplyRideProgress("arriving", "inprogress")).toBe(true);
+  });
+  it("recovers a completed ride awaiting destination collection after refresh", async () => {
+    vi.spyOn(rideApi, "history").mockResolvedValue([{ id: "due", status: "COMPLETED", paymentStatus: "PENDING" }] as RideHistoryItem[]);
+    vi.spyOn(rideApi, "bookingDetails").mockResolvedValue({ data: { rideId: "due", status: "COMPLETED" } as BookingDetails });
+    expect((await loadCustomerActiveRide())?.history.id).toBe("due");
+  });
   it("restores active rides, ignoring completed history", async () => {
     vi.spyOn(rideApi, "history").mockResolvedValue([
       { id: "old", status: "COMPLETED" },

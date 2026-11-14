@@ -8,6 +8,7 @@ export function PaymentMethods({
   checking,
   failed,
   onRetry,
+  walletBalance = null,
 }: {
   payment: ClientPayment;
   onChange: (payment: ClientPayment) => void;
@@ -15,23 +16,28 @@ export function PaymentMethods({
   checking: boolean;
   failed: boolean;
   onRetry: () => void;
+  walletBalance?: number | null;
 }) {
   const methods: { id: ClientPayment; label: string; sub: string }[] = [
-    { id: "cash", label: "Cash", sub: "Pay on drop" },
-    { id: "upi", label: "UPI", sub: "Pay securely with Razorpay" },
-    { id: "card", label: "Card", sub: "Debit or credit card" },
+    {
+      id: "wallet",
+      label: "RideHer wallet",
+      sub:
+        walletBalance === null
+          ? "Check balance / add money"
+          : `Balance ₹${walletBalance.toFixed(2)}`,
+    },
+    { id: "cash", label: "Pay at the end", sub: "Cash or scan captain’s QR" },
   ];
-  const onlineAvailable = methods.some(
-    (method) => needsOnlinePayment(method.id) && isPaymentMethodAvailable(method.id, configuration),
-  );
+  const onlineAvailable = configuration?.configured && configuration.provider === "razorpay";
   return (
     <div className="mb-6 px-6">
       <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         Payment
       </p>
-      {configuration?.mode === "test" && needsOnlinePayment(payment) && (
+      {configuration?.mode === "test" && payment === "wallet" && (
         <p className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs">
-          Test checkout: no real money will be collected.
+          Test wallet: top-ups use test money, separate from your real balance.
         </p>
       )}
       {!configuration && checking && (
@@ -39,12 +45,12 @@ export function PaymentMethods({
           Checking online payment options…
         </p>
       )}
-      {(failed || (configuration && !onlineAvailable)) && (
+      {payment === "wallet" && (failed || (configuration && !onlineAvailable)) && (
         <div className="mb-3 rounded-xl border border-border p-3 text-xs">
           <p role={failed ? "alert" : "status"}>
             {failed
-              ? "Could not check online payment options. Please try again."
-              : "UPI and card payments are temporarily unavailable. Try again or choose cash."}
+              ? "Could not check wallet top-up availability. Please try again."
+              : "Wallet top-ups are temporarily unavailable. Use your existing balance or pay at the end."}
           </p>
           <button
             type="button"
@@ -56,10 +62,11 @@ export function PaymentMethods({
           </button>
         </div>
       )}
-      <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-3 gap-2">
+      <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-2 gap-2">
         {methods.map((method) => {
           const active = method.id === payment;
-          const available = isPaymentMethodAvailable(method.id, configuration);
+          const available =
+            method.id === "wallet" || isPaymentMethodAvailable(method.id, configuration);
           return (
             <button
               key={method.id}

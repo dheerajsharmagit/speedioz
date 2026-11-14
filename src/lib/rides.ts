@@ -24,6 +24,9 @@ export interface Ride {
   fare_inr: number;
   status: RideStatus;
   otp: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  fareBreakdown?: Record<string, number> | null;
   use_smart_route?: boolean;
   captain_name?: string;
   captain_phone?: string;

@@ -11,6 +11,7 @@ import {
   LogOut,
   LogIn,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,7 @@ export function RoleNav() {
               </SheetHeader>
 
               <div className="mt-4 space-y-1.5">
+                <Link to="/wallet" onClick={() => setMoreOpen(false)} className="flex items-center gap-3 rounded-2xl bg-muted/50 px-4 py-3.5 text-sm font-semibold"><Wallet className="h-5 w-5 text-primary" />Wallet & transactions</Link>
                 {user?.role === "CAPTAIN" && (
                   <Link
                     to="/captain"

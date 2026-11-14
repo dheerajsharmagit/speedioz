@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronDown, Loader2, MapPin } from "lucide-react";
 import { RoleNav } from "@/components/rc/RoleNav";
+import { CustomerCollection } from "@/components/rc/CustomerCollection";
 import { RequestError, rideApi, storage, type RideHistoryItem } from "@/lib/api";
 
 export const Route = createFileRoute("/history")({
@@ -101,6 +102,7 @@ function HistoryPage() {
                       {(r.paymentIntents ?? []).map((p, i) => (
                         <Detail key={i} k={`Payment ${i + 1}`} v={p.status ?? "PENDING"} />
                       ))}
+                      {["COMPLETED", "RATED"].includes(r.status) && <div className="mt-4 text-foreground"><CustomerCollection rideId={r.id} /></div>}
                     </div>
                   )}
                 </div>
