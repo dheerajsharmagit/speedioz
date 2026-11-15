@@ -17,6 +17,7 @@ import {
 import { RoleNav } from "@/components/rc/RoleNav";
 import { Button } from "@/components/ui/button";
 import { userApi, storage, type AuthUser } from "@/lib/api";
+import { GoogleAccount } from "@/components/rc/GoogleAccount";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -199,6 +200,10 @@ function ProfilePage() {
             <Pencil /> Edit profile
           </Button>
         </section>
+
+        {user?.role === "CUSTOMER" && (
+          <GoogleAccount key={user.id} userId={user.id} email={user.email} />
+        )}
 
         {notice && (
           <p

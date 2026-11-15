@@ -51,6 +51,8 @@ export type AuthResponse = {
   tokens: { accessToken: string; refreshToken: string };
 };
 
+export type GoogleConfiguration = { enabled: boolean; clientId: string | null };
+
 export type ApiError = {
   code: string;
   message: string;
@@ -273,37 +275,21 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ ...data, expectedRole: "CUSTOMER" }),
     }),
-  // The backend accepts the Google/Supabase token under different key names
-  // depending on the endpoint, and its signup/login split is not consistent —
-  // try both routes and send every accepted alias.
-  google: async (credential: string) => {
-    const body = JSON.stringify({
-      credential,
-      idToken: credential,
-      accessToken: credential,
-      provider: "google",
-    });
-    const paths = ["/auth/google", "/auth/signup/google", "/auth/login/google"];
-    let lastError: unknown;
-    for (const path of paths) {
-      try {
-        return await api<AuthResponse>(path, { method: "POST", body });
-      } catch (e) {
-        lastError = e;
-        if (e instanceof RequestError && e.status !== 404 && e.status < 500) throw e;
-      }
-    }
-    throw lastError instanceof Error
-      ? new RequestError(503, {
-          code: "GOOGLE_SIGNIN_UNAVAILABLE",
-          message:
-            "Google sign-in is temporarily unavailable. Please sign in with your email and password.",
-          requestId: "internal",
-        })
-      : lastError;
-  },
+  googleConfiguration: () => api<{ data: GoogleConfiguration }>("/auth/google/config"),
+  // Send the Google ID credential to the customer-only backend endpoint.
+  google: (credential: string) =>
+    api<AuthResponse>("/auth/signup/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    }),
   signupGoogle: (credential: string) => authApi.google(credential),
   loginGoogle: (credential: string) => authApi.google(credential),
+  googleLinkStatus: () => api<{ data: { linked: boolean } }>("/auth/google/link"),
+  linkGoogle: (credential: string) =>
+    api<{ data: { linked: boolean } }>("/auth/google/link", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    }),
 
   logout: () =>
     api("/auth/logout", {
@@ -374,7 +360,12 @@ export const captainMapApi = {
 };
 
 export type CanonicalRideStatus =
-  "SEARCHING" | "MATCHED" | "ARRIVING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  | "SEARCHING"
+  | "MATCHED"
+  | "ARRIVING"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED";
 
 export type RideRequest = {
   pickupLat: number;
@@ -401,7 +392,18 @@ export type PaymentIntent = {
   currency?: string;
   mode?: "test" | "live";
   status?: PaymentStatus;
-  metadata?: { keyId?: string; publicKey?: string; orderId?: string; amount?: number; currency?: string; mode?: "test" | "live"; qrCode?: string; upiIntent?: string; checkoutUrl?: string; expiresAt?: string };
+  metadata?: {
+    keyId?: string;
+    publicKey?: string;
+    orderId?: string;
+    amount?: number;
+    currency?: string;
+    mode?: "test" | "live";
+    qrCode?: string;
+    upiIntent?: string;
+    checkoutUrl?: string;
+    expiresAt?: string;
+  };
 };
 
 export type RideHistoryItem = {
@@ -443,12 +445,33 @@ export function normalizePaymentStatus(res: any): PaymentStatus {
   return "PENDING";
 }
 
-export type PaymentConfiguration = { provider: string; configured: boolean; mode: "test" | "live" | "unconfigured"; onlineMethods: string[] };
+export type PaymentConfiguration = {
+  provider: string;
+  configured: boolean;
+  mode: "test" | "live" | "unconfigured";
+  onlineMethods: string[];
+};
 export const paymentApi = {
-  configuration: async (): Promise<PaymentConfiguration> => (await api<{ data: PaymentConfiguration }>("/payments/config")).data,
-  forRide: async (rideId: string) => normalizePaymentStatus(await api<any>(`/payments/ride/${rideId}`)),
-  prepare: async (rideId: string, paymentMethod: "UPI" | "CARD"): Promise<PaymentIntent> => (await api<{ data: PaymentIntent }>("/payments/intent", { method: "POST", body: JSON.stringify({ rideId, paymentMethod }) })).data,
-  confirm: async (body: { rideId: string; providerIntentId: string; paymentId?: string; signature?: string }): Promise<PaymentStatus> => normalizePaymentStatus(await api<any>("/payments/confirm", { method: "POST", body: JSON.stringify(body) })),
+  configuration: async (): Promise<PaymentConfiguration> =>
+    (await api<{ data: PaymentConfiguration }>("/payments/config")).data,
+  forRide: async (rideId: string) =>
+    normalizePaymentStatus(await api<any>(`/payments/ride/${rideId}`)),
+  prepare: async (rideId: string, paymentMethod: "UPI" | "CARD"): Promise<PaymentIntent> =>
+    (
+      await api<{ data: PaymentIntent }>("/payments/intent", {
+        method: "POST",
+        body: JSON.stringify({ rideId, paymentMethod }),
+      })
+    ).data,
+  confirm: async (body: {
+    rideId: string;
+    providerIntentId: string;
+    paymentId?: string;
+    signature?: string;
+  }): Promise<PaymentStatus> =>
+    normalizePaymentStatus(
+      await api<any>("/payments/confirm", { method: "POST", body: JSON.stringify(body) }),
+    ),
 };
 
 export type CanonicalRide = RideRequest & {
@@ -609,9 +632,26 @@ function parseWalletBalance(res: any): number {
 
 export const walletApi = {
   get: async () => ({ balance: parseWalletBalance(await api<any>("/users/me/wallet")) }),
-  details: async (): Promise<CustomerWallet> => (await api<{ data: CustomerWallet }>("/users/me/wallet")).data,
-  createTopUp: async (amount: number, key: string): Promise<WalletTopUp> => (await api<{ data: WalletTopUp }>("/users/me/wallet/topups", { method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ amount }) })).data,
-  confirmTopUp: async (id: string, proof: { paymentId?: string; signature?: string } = {}): Promise<WalletTopUp> => (await api<{ data: WalletTopUp }>(`/users/me/wallet/topups/${encodeURIComponent(id)}/confirm`, { method: "POST", body: JSON.stringify(proof) })).data,
+  details: async (): Promise<CustomerWallet> =>
+    (await api<{ data: CustomerWallet }>("/users/me/wallet")).data,
+  createTopUp: async (amount: number, key: string): Promise<WalletTopUp> =>
+    (
+      await api<{ data: WalletTopUp }>("/users/me/wallet/topups", {
+        method: "POST",
+        headers: { "Idempotency-Key": key },
+        body: JSON.stringify({ amount }),
+      })
+    ).data,
+  confirmTopUp: async (
+    id: string,
+    proof: { paymentId?: string; signature?: string } = {},
+  ): Promise<WalletTopUp> =>
+    (
+      await api<{ data: WalletTopUp }>(
+        `/users/me/wallet/topups/${encodeURIComponent(id)}/confirm`,
+        { method: "POST", body: JSON.stringify(proof) },
+      )
+    ).data,
   topup: async (amount: number) => {
     const res = await api<any>("/users/me/wallet/topup", {
       method: "POST",
@@ -621,13 +661,56 @@ export const walletApi = {
   },
 };
 
-export type WalletTopUp = PaymentIntent & { id: string; amountPaise: number; mode: "test" | "live" };
-export type CustomerWallet = { balance: number; balancePaise: number; currency: string; mode: "test" | "live"; transactions: { id: string; type: "CREDIT" | "DEBIT"; source: string; amountPaise: number; balanceAfterPaise: number; createdAt: string; note?: string }[]; pendingTopUps: WalletTopUp[] };
-export type RideCollection = { rideId: string; paymentMethod: string; paymentStatus: PaymentStatus; amountPaise: number; currency: string; mode: string; qrCode: string | null; checkoutUrl: string | null; providerIntentId: string | null };
+export type WalletTopUp = PaymentIntent & {
+  id: string;
+  amountPaise: number;
+  mode: "test" | "live";
+};
+export type CustomerWallet = {
+  balance: number;
+  balancePaise: number;
+  currency: string;
+  mode: "test" | "live";
+  transactions: {
+    id: string;
+    type: "CREDIT" | "DEBIT";
+    source: string;
+    amountPaise: number;
+    balanceAfterPaise: number;
+    createdAt: string;
+    note?: string;
+  }[];
+  pendingTopUps: WalletTopUp[];
+};
+export type RideCollection = {
+  rideId: string;
+  paymentMethod: string;
+  paymentStatus: PaymentStatus;
+  amountPaise: number;
+  currency: string;
+  mode: string;
+  qrCode: string | null;
+  checkoutUrl: string | null;
+  providerIntentId: string | null;
+};
 export const collectionApi = {
-  get: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`)).data,
-  create: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`, { method: "POST", body: "{}" })).data,
-  reconcile: async (rideId: string): Promise<RideCollection> => (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}/reconcile`, { method: "POST", body: "{}" })).data,
+  get: async (rideId: string): Promise<RideCollection> =>
+    (await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`))
+      .data,
+  create: async (rideId: string): Promise<RideCollection> =>
+    (
+      await api<{ data: RideCollection }>(`/payments/collection/${encodeURIComponent(rideId)}`, {
+        method: "POST",
+        body: "{}",
+      })
+    ).data,
+  reconcile: async (rideId: string): Promise<RideCollection> =>
+    (
+      await api<{ data: RideCollection }>(
+        `/payments/collection/${encodeURIComponent(rideId)}/reconcile`,
+        { method: "POST", body: "{}" },
+      )
+    ).data,
 };
 
 // Availability per vehicle type (enabled per city/zone in the admin module).

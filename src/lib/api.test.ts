@@ -19,6 +19,44 @@ afterEach(() => {
   vi.resetModules();
 });
 describe("API authentication", () => {
+  it("sends only a Google ID credential to the customer-only endpoint", async () => {
+    browser();
+    const fetcher = vi.fn(async () =>
+      Response.json({ user, tokens: { accessToken: "new", refreshToken: "next" } }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { authApi } = await import("./api");
+    await authApi.loginGoogle("google-id-credential");
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/auth\/signup\/google$/);
+    expect(JSON.parse(init.body as string)).toEqual({ credential: "google-id-credential" });
+  });
+  it("does not retry invalid Google credentials through other auth endpoints", async () => {
+    browser();
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        { code: "GOOGLE_AUTH_FAILED", message: "Invalid Google credential" },
+        { status: 401 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { authApi, storage } = await import("./api");
+    storage.clearAuth();
+    await expect(authApi.loginGoogle("invalid-token")).rejects.toMatchObject({ status: 401 });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it("uses the signed-in customer's bearer token to explicitly connect Google", async () => {
+    browser();
+    const fetcher = vi.fn(async () => Response.json({ data: { linked: true } }));
+    vi.stubGlobal("fetch", fetcher);
+    const { authApi } = await import("./api");
+    await authApi.linkGoogle("verified-google-id");
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/auth\/google\/link$/);
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer old");
+    expect(JSON.parse(init.body as string)).toEqual({ credential: "verified-google-id" });
+  });
   it("rejects every concurrent request when shared refresh fails", async () => {
     browser();
     let finish!: (response: Response) => void;
