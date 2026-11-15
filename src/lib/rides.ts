@@ -20,7 +20,7 @@ export interface Ride {
   drop_label: string;
   drop_lat: number;
   drop_lng: number;
-  vehicle_type: "bike" | "auto" | "ev";
+  vehicle_type: "bike" | "auto" | "ev" | "cab";
   fare_inr: number;
   status: RideStatus;
   otp: string;

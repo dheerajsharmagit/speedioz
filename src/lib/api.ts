@@ -1,3 +1,5 @@
+import type { NearbyAvailability } from "./nearby-captains";
+
 // Primary: call the RIDEHER backend directly. If the browser blocks the call
 // (CORS / network), we transparently retry through our own same-origin proxy
 // route, which forwards the caller's bearer token upstream unchanged.
@@ -354,7 +356,7 @@ export const captainAvailabilityApi = {
 
 export const captainMapApi = {
   get: (lat: number, lng: number, vehicleType?: "BIKE" | "AUTO" | "CAB") =>
-    api<{ data: { captains: { lat: number; lng: number; vehicleType: string }[] } }>(
+    api<{ data: NearbyAvailability }>(
       `/captains/map-captains?lat=${lat}&lng=${lng}${vehicleType ? `&vehicleType=${vehicleType}` : ""}`,
     ),
 };

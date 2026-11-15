@@ -29,6 +29,8 @@ export type GoogleMapsApi = {
     Polyline: new (options: Record<string, unknown>) => GooglePolyline;
     LatLngBounds: new () => GoogleLatLngBounds;
     SymbolPath: { CIRCLE: unknown };
+    Size: new (width: number, height: number) => { width: number; height: number };
+    Point: new (x: number, y: number) => { x: number; y: number };
     geometry: { encoding: { decodePath: (encoded: string) => GoogleLatLng[] } };
     importLibrary: (library: "places" | string) => Promise<unknown>;
   };

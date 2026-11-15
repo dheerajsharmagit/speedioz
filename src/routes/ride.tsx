@@ -2,11 +2,25 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CancelAcceptedRide } from "@/components/rc/CancelAcceptedRide";
-import { loadCustomerActiveRide, cancelRideConfirmed, cancelAcceptedRide, canApplyRideProgress } from "@/lib/booking";
+import {
+  loadCustomerActiveRide,
+  cancelRideConfirmed,
+  cancelAcceptedRide,
+  canApplyRideProgress,
+} from "@/lib/booking";
 import { authApi } from "@/lib/api";
 import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
+import { NearbyCaptains, VehicleSymbol } from "@/components/rc/NearbyCaptains";
+import {
+  canShowNearbyCaptains,
+  isCaptainTracking,
+  isMapPosition,
+  mapVehicleType,
+  normalizeNearbyAvailability,
+  type MapVehicleType,
+} from "@/lib/nearby-captains";
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
 import { PaymentMethods } from "@/components/rc/PaymentMethods";
 import { WalletFunding, walletQueryKey } from "@/components/rc/WalletFunding";
@@ -15,7 +29,6 @@ import { PickupOtp, shouldShowPickupOtp } from "@/components/rc/PickupOtp";
 import {
   RequestError,
   API_BASE_URL,
-  captainAvailabilityApi,
   captainMapApi,
   rideApi,
   storage,
@@ -30,7 +43,13 @@ import { getDeviceId } from "@/lib/device-id";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
-import { paymentApi, parseCreateRide, type PaymentIntent, type PaymentStatus, type PaymentConfiguration } from "@/lib/api";
+import {
+  paymentApi,
+  parseCreateRide,
+  type PaymentIntent,
+  type PaymentStatus,
+  type PaymentConfiguration,
+} from "@/lib/api";
 import {
   needsOnlinePayment,
   isPaymentMethodAvailable,
@@ -38,10 +57,7 @@ import {
   razorpayConfirmation,
   toServerPayment,
 } from "@/lib/payments";
-import {
-  RAZORPAY_CHECKOUT_DISMISSED,
-  openRazorpayCheckout,
-} from "@/lib/razorpay";
+import { RAZORPAY_CHECKOUT_DISMISSED, openRazorpayCheckout } from "@/lib/razorpay";
 
 // Customer-only gate: this app is the customer section, so anyone not signed
 // in is sent straight to the login page instead of an "account required" screen.
@@ -271,10 +287,7 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     drop_label: drop.address,
     drop_lat: drop.lat,
     drop_lng: drop.lng,
-    vehicle_type:
-      (details.vehicleType ?? ride.vehicleType).toLowerCase() === "cab"
-        ? "auto"
-        : ((details.vehicleType ?? ride.vehicleType).toLowerCase() as "bike" | "auto" | "ev"),
+    vehicle_type: (details.vehicleType ?? ride.vehicleType).toLowerCase() as Ride["vehicle_type"],
     fare_inr: details.fareFinal ?? ride.fareFinal ?? details.fareEstimate ?? ride.fareEstimate,
     status: mapRideStatus(details.status ?? ride.status),
     // Keep the OTP returned at booking time while the matched-details poll is
@@ -342,7 +355,11 @@ function RidePage() {
     refetchInterval: step === "confirm" ? 15000 : false,
   });
   const gateway = gatewayQuery.data ?? null;
-  const walletQuery = useQuery({ queryKey: walletQueryKey(), queryFn: walletApi.details, refetchInterval: step === "confirm" ? 15000 : false });
+  const walletQuery = useQuery({
+    queryKey: walletQueryKey(),
+    queryFn: walletApi.details,
+    refetchInterval: step === "confirm" ? 15000 : false,
+  });
   const [useSmartRoute, setUseSmartRoute] = useState(false);
   const [ride, setRide] = useState<Ride | null>(null);
   const [recovering, setRecovering] = useState(true);
@@ -368,6 +385,7 @@ function RidePage() {
         firstFixRef.current = true;
         setLocating(false);
         setRide(restored);
+        setSelected(restored.vehicle_type);
         setPickup({
           label: restored.pickup_label,
           lat: restored.pickup_lat,
@@ -437,8 +455,45 @@ function RidePage() {
   const paymentPickedRef = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
   const stepRef = useRef<UiStep>("destination");
-  const [activeCaptains, setActiveCaptains] = useState<number | null>(null);
-  const [nearbyCaptains, setNearbyCaptains] = useState<{ lat: number; lng: number }[]>([]);
+  const showNearby = canShowNearbyCaptains({ step, hasRide: !!ride, creating, recovering });
+  const nearbyQuery = useQuery({
+    queryKey: ["nearby-captains", storage.getUser()?.id, pickup.lat, pickup.lng],
+    queryFn: async () =>
+      normalizeNearbyAvailability((await captainMapApi.get(pickup.lat, pickup.lng)).data),
+    enabled: showNearby && pickupConfirmed && !!storage.getAccessToken(),
+    staleTime: 10000,
+    refetchInterval: showNearby ? 10000 : false,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    retry: 1,
+  });
+  const [expiredNearbyAt, setExpiredNearbyAt] = useState(0);
+  useEffect(() => {
+    if (!showNearby || !nearbyQuery.dataUpdatedAt) return;
+    const updatedAt = nearbyQuery.dataUpdatedAt;
+    const timer = window.setTimeout(
+      () => setExpiredNearbyAt(updatedAt),
+      Math.max(0, updatedAt + 30000 - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [showNearby, nearbyQuery.dataUpdatedAt]);
+  const nearby =
+    showNearby &&
+    pickupConfirmed &&
+    !nearbyQuery.isError &&
+    expiredNearbyAt !== nearbyQuery.dataUpdatedAt &&
+    Date.now() - nearbyQuery.dataUpdatedAt < 30000
+      ? nearbyQuery.data
+      : undefined;
+  const nearbyUnavailable =
+    nearbyQuery.isError || (!nearby && nearbyQuery.dataUpdatedAt > 0 && !nearbyQuery.isFetching);
+  const mapType = mapVehicleType(ride?.vehicle_type ?? selected);
+  const nearbyCaptains = useMemo(
+    () => nearby?.captains.filter((captain) => captain.vehicleType === mapType) ?? [],
+    [nearby, mapType],
+  );
+  const trackingCaptain = !!ride && isCaptainTracking(step);
+  const mapCaptain = trackingCaptain && isMapPosition(captainPos) ? captainPos : null;
 
   function requestGeolocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -568,9 +623,12 @@ function RidePage() {
           if (next === "searching" && (prev === "matched" || prev === "arriving"))
             setRedispatching(true);
           if (next !== "searching") setRedispatching(false);
-          if (!(prev === "rating" && next === "completed")) { stepRef.current = next; setStep(next); }
+          if (!(prev === "rating" && next === "completed")) {
+            stepRef.current = next;
+            setStep(next);
+          }
         }
-        if (response.data.captainLocation) setCaptainPos(response.data.captainLocation);
+        setCaptainPos(response.data.captainLocation ?? null);
       } catch (error) {
         console.warn("Could not refresh ride booking details", error);
       }
@@ -613,7 +671,7 @@ function RidePage() {
               }
             : current,
         );
-        if (data.captainLocation) setCaptainPos(data.captainLocation);
+        setCaptainPos(data.captainLocation ?? null);
         awaitingPaymentRef.current = false;
         setRedispatching(false);
         setStep("matched");
@@ -686,7 +744,7 @@ function RidePage() {
           data: {
             origin: { lat: captainPos.lat, lng: captainPos.lng },
             destination: { lat: ride.pickup_lat, lng: ride.pickup_lng },
-            travelMode: ride.vehicle_type === "auto" ? "DRIVE" : "TWO_WHEELER",
+            travelMode: ["auto", "cab"].includes(ride.vehicle_type) ? "DRIVE" : "TWO_WHEELER",
           },
         });
         setApproachPolyline(res.encodedPolyline);
@@ -796,19 +854,6 @@ function RidePage() {
     };
   }, [dest?.lat, dest?.lng, pickup.lat, pickup.lng, quoteAttempt]);
 
-  useEffect(() => {
-    if (!storage.getAccessToken()) return;
-    const vehicleType = selected === "auto" ? "AUTO" : selected === "cab" ? "CAB" : "BIKE";
-    const refreshAvailability = () =>
-      captainAvailabilityApi
-        .get(vehicleType)
-        .then((response) => setActiveCaptains(response.data.activeCaptains))
-        .catch(() => setActiveCaptains(null));
-    refreshAvailability();
-    const interval = window.setInterval(refreshAvailability, 30000);
-    return () => window.clearInterval(interval);
-  }, [selected]);
-
   // Vehicle-type availability comes from the cities/zones admin module. Every
   // supported type stays visible; unavailable ones render disabled.
   useEffect(() => {
@@ -826,20 +871,6 @@ function RidePage() {
       cancelled = true;
     };
   }, []);
-
-
-  useEffect(() => {
-    if (!storage.getAccessToken()) return;
-    const vehicleType = selected === "auto" ? "AUTO" : selected === "cab" ? "CAB" : "BIKE";
-    const refreshMapCaptains = () =>
-      captainMapApi
-        .get(pickup.lat, pickup.lng, vehicleType)
-        .then((response) => setNearbyCaptains(response.data.captains))
-        .catch(() => setNearbyCaptains([]));
-    refreshMapCaptains();
-    const interval = window.setInterval(refreshMapCaptains, 30000);
-    return () => window.clearInterval(interval);
-  }, [pickup.lat, pickup.lng, selected]);
 
   async function createRide() {
     if (
@@ -869,6 +900,7 @@ function RidePage() {
     // Same key on network retries so the server never books twice.
     if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     setCreating(true);
+    setCaptainPos(null);
     try {
       const response = await rideApi.create(
         {
@@ -880,7 +912,9 @@ function RidePage() {
           dropLng: dest.lng,
           // Backend accepts only BIKE | AUTO | CAB — EV bikes book as BIKE.
           vehicleType: (selected === "ev" ? "BIKE" : selected.toUpperCase()) as
-            "BIKE" | "AUTO" | "CAB",
+            | "BIKE"
+            | "AUTO"
+            | "CAB",
           paymentMethod: toServerPayment(payment),
         },
         idemKeyRef.current,
@@ -901,11 +935,14 @@ function RidePage() {
       const code = apiError?.code;
       if (code === "INSUFFICIENT_WALLET_BALANCE") {
         void walletQuery.refetch();
-        setQuoteAttempt(value => value + 1);
+        setQuoteAttempt((value) => value + 1);
       }
       try {
         const active = await loadCustomerActiveRide();
-        if (active?.history.status === "SEARCHING" && ["UPI", "CARD"].includes(active.history.paymentMethod ?? "")) {
+        if (
+          active?.history.status === "SEARCHING" &&
+          ["UPI", "CARD"].includes(active.history.paymentMethod ?? "")
+        ) {
           setRide(toClientRide(active.details));
           setPayment(active.history.paymentMethod === "CARD" ? "card" : "upi");
           setPaymentIntent(active.history.paymentIntents?.[0] ?? {});
@@ -913,7 +950,9 @@ function RidePage() {
           setStep("payment");
           return;
         }
-      } catch { /* Preserve the original booking error if recovery is unavailable. */ }
+      } catch {
+        /* Preserve the original booking error if recovery is unavailable. */
+      }
       const msg =
         code === "EXTERNAL_API_ERROR"
           ? "The RIDEHER booking service is temporarily unavailable. Please try again shortly."
@@ -923,7 +962,6 @@ function RidePage() {
       setCreating(false);
     }
   }
-
 
   function onPaid() {
     awaitingPaymentRef.current = false;
@@ -1145,27 +1183,33 @@ function RidePage() {
           <RideMap
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
-            captain={captainPos}
-            nearbyCaptains={ride ? [] : nearbyCaptains}
+            captain={mapCaptain}
+            captainVehicleType={mapType}
+            nearbyCaptains={nearbyCaptains}
             userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
             routeLoading={routeLoading}
             routeError={routeError}
-            fitKey={step}
+            fitKey={`${step}:${mapType}:${nearby ? "ready" : "pending"}`}
             recenterKey={recenterKey}
             recenterTarget={userLocation ?? mapPickup}
             className="absolute inset-0"
           />
 
-          {activeCaptains !== null && (
-            <div className="absolute left-4 top-24 flex items-center gap-2 rounded-full bg-card/95 px-3 py-2 text-xs font-bold text-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
-              <span aria-hidden="true" className="text-base">
-                🛵
-              </span>
-              <span>
-                {activeCaptains} active captain{activeCaptains === 1 ? "" : "s"} nearby
-              </span>
-            </div>
+          {(showNearby || trackingCaptain) && (
+            <NearbyCaptains
+              type={mapType}
+              count={nearby?.counts[mapType] ?? null}
+              radiusKm={nearby?.radiusKm ?? 6}
+              loading={nearbyQuery.isPending}
+              failed={nearbyUnavailable}
+              pickupConfirmed={pickupConfirmed}
+              assigned={trackingCaptain}
+              hasLocation={!!mapCaptain}
+              onRetry={() => {
+                void nearbyQuery.refetch();
+              }}
+            />
           )}
 
           {/* Recenter button */}
@@ -1431,6 +1475,8 @@ function RidePage() {
               setUseSmartRoute={setUseSmartRoute}
               quotes={fareQuotes}
               availability={vehicleAvailability}
+              nearbyCounts={nearby?.counts ?? null}
+              nearbyLoading={nearbyQuery.isPending || nearbyQuery.isFetching}
               onNext={() => setStep("confirm")}
             />
           )}
@@ -1446,7 +1492,9 @@ function RidePage() {
               gateway={gateway}
               gatewayChecking={gatewayQuery.isFetching}
               gatewayFailed={gatewayQuery.isError}
-              onRetryGateway={() => { void gatewayQuery.refetch(); }}
+              onRetryGateway={() => {
+                void gatewayQuery.refetch();
+              }}
               walletBalance={walletQuery.data?.balance ?? null}
               onNext={createRide}
               busy={
@@ -1553,7 +1601,6 @@ function RidePage() {
         </section>
       </div>
       <RoleNav />
-
     </div>
   );
 }
@@ -1729,6 +1776,8 @@ function VehicleStep({
   setUseSmartRoute,
   quotes,
   availability,
+  nearbyCounts,
+  nearbyLoading,
   onNext,
 }: {
   selected: string;
@@ -1737,6 +1786,8 @@ function VehicleStep({
   setUseSmartRoute: (v: boolean) => void;
   quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>>;
   availability: Partial<Record<VehicleTypeId, boolean>>;
+  nearbyCounts: Record<MapVehicleType, number> | null;
+  nearbyLoading: boolean;
   onNext: () => void;
 }) {
   return (
@@ -1748,7 +1799,10 @@ function VehicleStep({
         </p>
       </div>
 
-      <div className="mb-6 flex gap-3 overflow-x-auto px-6 scrollbar-hide">
+      <div
+        className="mx-6 mb-6 overflow-hidden rounded-2xl border border-border"
+        aria-label="Vehicle options"
+      >
         {vehicles.map((v) => {
           const active = v.id === selected;
           // EV bikes book as BIKE on the backend, so availability follows BIKE.
@@ -1764,32 +1818,39 @@ function VehicleStep({
               }}
               disabled={unavailable}
               aria-disabled={unavailable}
-              className={`w-32 flex-none rounded-2xl p-4 text-left ring-1 transition ${
+              aria-pressed={active}
+              className={`flex min-h-20 w-full items-center gap-3 border-b border-border/60 px-4 py-3 text-left transition last:border-b-0 ${
                 unavailable
-                  ? "cursor-not-allowed bg-muted opacity-50 ring-border"
+                  ? "cursor-not-allowed bg-muted opacity-60"
                   : active
-                    ? "bg-primary ring-black/5"
-                    : "bg-card ring-border hover:ring-foreground/20"
+                    ? "bg-primary/15"
+                    : "bg-card hover:bg-muted/60"
               }`}
             >
-              <p className="font-mono text-[10px] font-bold uppercase">
-                {v.name}
-                {v.note ? <span className="ml-1 text-accent">·{v.note}</span> : null}
-              </p>
-              <p
-                className={`mt-4 text-2xl font-extrabold ${active ? "" : v.id === "ev" ? "text-accent" : ""}`}
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-secondary">
+                <VehicleSymbol type={availabilityKey} className="h-6 w-6" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold">{v.name}</span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {unavailable
+                    ? "Not available in this area"
+                    : nearbyCounts
+                      ? `${nearbyCounts[availabilityKey]} captain${nearbyCounts[availabilityKey] === 1 ? "" : "s"} nearby`
+                      : nearbyLoading
+                        ? "Checking nearby availability…"
+                        : "Nearby count unavailable"}
+                </span>
+              </span>
+              <span className="text-lg font-bold">
+                {unavailable ? "—" : `₹${quotes[v.id as keyof typeof quotes]}`}
+              </span>
+              <span
+                aria-hidden="true"
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${active ? "border-secondary bg-primary" : "border-muted-foreground/40"}`}
               >
-                {unavailable
-                  ? "—"
-                  : quotes[v.id as "bike" | "auto" | "ev" | "cab"]
-                    ? `₹${quotes[v.id as "bike" | "auto" | "ev" | "cab"]}`
-                    : "Get quote"}
-              </p>
-              <p
-                className={`mt-1 text-[10px] font-semibold ${active ? "opacity-70" : "text-muted-foreground"}`}
-              >
-                {unavailable ? "Not available" : "Pickup time after matching"}
-              </p>
+                {active && <span className="h-1.5 w-1.5 rounded-full bg-secondary" />}
+              </span>
             </button>
           );
         })}
@@ -1910,7 +1971,6 @@ function ConfirmStep({
         </div>
       </div>
 
-
       <PaymentMethods
         payment={payment}
         onChange={setPayment}
@@ -1920,7 +1980,11 @@ function ConfirmStep({
         onRetry={onRetryGateway}
         walletBalance={walletBalance}
       />
-      {payment === "wallet" && <div className="mx-6 mb-5"><WalletFunding requiredFare={fare} /></div>}
+      {payment === "wallet" && (
+        <div className="mx-6 mb-5">
+          <WalletFunding requiredFare={fare} />
+        </div>
+      )}
 
       <div className="px-6 pb-6">
         <button
@@ -1928,7 +1992,11 @@ function ConfirmStep({
           disabled={busy || !isPaymentMethodAvailable(payment, gateway, walletBalance, fare)}
           className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-60"
         >
-          {busy ? "Requesting…" : payment === "wallet" ? `Book with wallet · ₹${fare}` : `Pay at the end · ₹${fare}`}
+          {busy
+            ? "Requesting…"
+            : payment === "wallet"
+              ? `Book with wallet · ₹${fare}`
+              : `Pay at the end · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           OTP shared with captain on pickup
@@ -2145,11 +2213,19 @@ function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => voi
           <div className="mt-3 space-y-1 text-xs text-muted-foreground">
             <div className="flex justify-between">
               <span>Ride fare</span>
-              <span>{ride.fareBreakdown ? `₹${((ride.fareBreakdown.subtotalPaise ?? 0) / 100).toFixed(2)}` : "Included in total"}</span>
+              <span>
+                {ride.fareBreakdown
+                  ? `₹${((ride.fareBreakdown.subtotalPaise ?? 0) / 100).toFixed(2)}`
+                  : "Included in total"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span>Taxes & fees</span>
-              <span>{ride.fareBreakdown ? `₹${((ride.fareBreakdown.gstPaise ?? 0) / 100).toFixed(2)}` : "Included in total"}</span>
+              <span>
+                {ride.fareBreakdown
+                  ? `₹${((ride.fareBreakdown.gstPaise ?? 0) / 100).toFixed(2)}`
+                  : "Included in total"}
+              </span>
             </div>
           </div>
           <div className="my-4 h-px bg-border" />
@@ -2297,9 +2373,24 @@ function RatingStep({
 }
 
 /* ---------- Online payment (UPI / Card) ---------- */
-function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, onCancel }: {
-  rideId: string; method: Payment; fare: number; intent: PaymentIntent;
-  onPaid: () => void; onRetry: () => void; onSwitch: () => void; onCancel: () => void;
+function PaymentStep({
+  rideId,
+  method,
+  fare,
+  intent,
+  onPaid,
+  onRetry,
+  onSwitch,
+  onCancel,
+}: {
+  rideId: string;
+  method: Payment;
+  fare: number;
+  intent: PaymentIntent;
+  onPaid: () => void;
+  onRetry: () => void;
+  onSwitch: () => void;
+  onCancel: () => void;
 }) {
   const [status, setStatus] = useState<PaymentStatus>(intent.status ?? "PENDING");
   const [busy, setBusy] = useState(false);
@@ -2315,77 +2406,175 @@ function PaymentStep({ rideId, method, fare, intent, onPaid, onRetry, onSwitch, 
 
   function applyStatus(next: PaymentStatus) {
     setStatus(next);
-    if (next === "PAID" && !paidRef.current) { paidRef.current = true; onPaidRef.current(); }
+    if (next === "PAID" && !paidRef.current) {
+      paidRef.current = true;
+      onPaidRef.current();
+    }
   }
   useEffect(() => {
-    let stopped = false, checking = false;
+    let stopped = false,
+      checking = false;
     let lastReconcile = Date.now();
     const poll = async () => {
       if (stopped || checking || paidRef.current || busyRef.current) return;
       checking = true;
       try {
         let next = await paymentApi.forRide(rideId);
-        if (next === "PENDING" && intent.providerIntentId?.startsWith("order_") && Date.now() - lastReconcile >= 15000) {
+        if (
+          next === "PENDING" &&
+          intent.providerIntentId?.startsWith("order_") &&
+          Date.now() - lastReconcile >= 15000
+        ) {
           lastReconcile = Date.now();
           next = await paymentApi.confirm({ rideId, providerIntentId: intent.providerIntentId });
         }
         if (!stopped) applyStatus(next);
-      } catch { /* Retain the pending state; never infer success from a network failure. */ }
-      finally { checking = false; }
+      } catch {
+        /* Retain the pending state; never infer success from a network failure. */
+      } finally {
+        checking = false;
+      }
     };
     void poll();
     const timer = window.setInterval(poll, 5000);
-    return () => { stopped = true; window.clearInterval(timer); };
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [rideId, intent.providerIntentId]);
 
   async function checkStatus() {
-    setBusy(true); busyRef.current = true; setError("");
+    setBusy(true);
+    busyRef.current = true;
+    setError("");
     try {
       const prepared = await paymentApi.prepare(rideId, method === "card" ? "CARD" : "UPI");
       setCheckoutIntent(prepared);
-      const next = await paymentApi.confirm({ rideId, providerIntentId: prepared.providerIntentId! });
+      const next = await paymentApi.confirm({
+        rideId,
+        providerIntentId: prepared.providerIntentId!,
+      });
       applyStatus(next);
-      if (next === "PENDING") setError("Payment is still pending. Check your payment app before retrying.");
-    } catch (error) { setError(error instanceof Error ? error.message : "Unable to verify payment. Please retry."); }
-    finally { setBusy(false); busyRef.current = false; }
+      if (next === "PENDING")
+        setError("Payment is still pending. Check your payment app before retrying.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to verify payment. Please retry.");
+    } finally {
+      setBusy(false);
+      busyRef.current = false;
+    }
   }
   async function payWithRazorpay() {
     if (busyRef.current) return;
-    setBusy(true); busyRef.current = true; setError("");
+    setBusy(true);
+    busyRef.current = true;
+    setError("");
     try {
       const prepared = await paymentApi.prepare(rideId, method === "card" ? "CARD" : "UPI");
       setCheckoutIntent(prepared);
-      if (prepared.status === "PAID") { applyStatus("PAID"); return; }
+      if (prepared.status === "PAID") {
+        applyStatus("PAID");
+        return;
+      }
       const checkout = razorpayCheckoutDetails(prepared);
       const user = storage.getUser();
-      const callback = await openRazorpayCheckout({ ...checkout, name: "RideHer", description: checkout.mode === "test" ? "Test ride payment" : "Ride payment", prefill: { name: user?.name, email: user?.email ?? undefined, contact: user?.phone ?? undefined } });
-      const next = await paymentApi.confirm(razorpayConfirmation(rideId, checkout.orderId, callback));
+      const callback = await openRazorpayCheckout({
+        ...checkout,
+        name: "RideHer",
+        description: checkout.mode === "test" ? "Test ride payment" : "Ride payment",
+        prefill: {
+          name: user?.name,
+          email: user?.email ?? undefined,
+          contact: user?.phone ?? undefined,
+        },
+      });
+      const next = await paymentApi.confirm(
+        razorpayConfirmation(rideId, checkout.orderId, callback),
+      );
       applyStatus(next);
-      if (next !== "PAID") setError("Your payment is being verified. We will continue when capture is confirmed.");
+      if (next !== "PAID")
+        setError("Your payment is being verified. We will continue when capture is confirmed.");
     } catch (error) {
       if (error instanceof Error && error.message === RAZORPAY_CHECKOUT_DISMISSED) return;
-      setError(error instanceof Error ? error.message : "Unable to complete payment. Check payment status before retrying.");
-    } finally { setBusy(false); busyRef.current = false; }
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to complete payment. Check payment status before retrying.",
+      );
+    } finally {
+      setBusy(false);
+      busyRef.current = false;
+    }
   }
-  return <>
-    <div className="mb-4 px-6 text-center">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Secure Razorpay checkout</p>
-      <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Pay ₹{displayFare.toFixed(2)} to book</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Your captain request starts after the payment is verified.</p>
-    </div>
-    <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 space-y-4">
-      {isTest && <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm">Test payment: no real money is collected.</p>}
-      <p className="text-center text-sm">Pay using UPI, cards or other methods enabled for this Razorpay account.</p>
-      <p className="text-center text-xs text-muted-foreground" role="status">Payment status: {status.toLowerCase()}</p>
-      {error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-      {status === "REFUNDED" && <p className="text-sm">This payment has been refunded. Choose another method to make a new booking.</p>}
-      <button disabled={busy || status === "PAID" || status === "REFUNDED"} onClick={payWithRazorpay} className="h-12 w-full rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60">{busy ? "Please wait…" : `Pay ₹${displayFare.toFixed(2)}`}</button>
-      <button disabled={busy || status === "REFUNDED"} onClick={checkStatus} className="h-12 w-full rounded-full border border-border text-sm font-bold disabled:opacity-60">Check payment status</button>
-      <p className="text-xs text-muted-foreground">Closing checkout does not create another booking. Retry uses the same payment order.</p>
-    </div>
-    <div className="grid gap-2 px-6 pb-6">
-      <button disabled={busy} onClick={onSwitch} className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60">Change payment method</button>
-      <button disabled={busy} onClick={onCancel} className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60">Cancel booking</button>
-    </div>
-  </>;
+  return (
+    <>
+      <div className="mb-4 px-6 text-center">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Secure Razorpay checkout
+        </p>
+        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">
+          Pay ₹{displayFare.toFixed(2)} to book
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Your captain request starts after the payment is verified.
+        </p>
+      </div>
+      <div className="mx-6 mb-6 rounded-2xl border border-border bg-card p-5 space-y-4">
+        {isTest && (
+          <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm">
+            Test payment: no real money is collected.
+          </p>
+        )}
+        <p className="text-center text-sm">
+          Pay using UPI, cards or other methods enabled for this Razorpay account.
+        </p>
+        <p className="text-center text-xs text-muted-foreground" role="status">
+          Payment status: {status.toLowerCase()}
+        </p>
+        {error && (
+          <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {status === "REFUNDED" && (
+          <p className="text-sm">
+            This payment has been refunded. Choose another method to make a new booking.
+          </p>
+        )}
+        <button
+          disabled={busy || status === "PAID" || status === "REFUNDED"}
+          onClick={payWithRazorpay}
+          className="h-12 w-full rounded-full bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60"
+        >
+          {busy ? "Please wait…" : `Pay ₹${displayFare.toFixed(2)}`}
+        </button>
+        <button
+          disabled={busy || status === "REFUNDED"}
+          onClick={checkStatus}
+          className="h-12 w-full rounded-full border border-border text-sm font-bold disabled:opacity-60"
+        >
+          Check payment status
+        </button>
+        <p className="text-xs text-muted-foreground">
+          Closing checkout does not create another booking. Retry uses the same payment order.
+        </p>
+      </div>
+      <div className="grid gap-2 px-6 pb-6">
+        <button
+          disabled={busy}
+          onClick={onSwitch}
+          className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60"
+        >
+          Change payment method
+        </button>
+        <button
+          disabled={busy}
+          onClick={onCancel}
+          className="h-12 rounded-full border border-border bg-background text-sm font-bold disabled:opacity-60"
+        >
+          Cancel booking
+        </button>
+      </div>
+    </>
+  );
 }

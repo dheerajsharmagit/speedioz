@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { decodePolyline } from "@/lib/polyline";
 import { useTheme } from "@/lib/theme";
+import {
+  visibleNearbyCaptains,
+  type NearbyCaptain,
+  type MapVehicleType,
+} from "@/lib/nearby-captains";
+import { vehicleMarkerSvg } from "@/lib/vehicle-markers";
 
 // NOTE: Leaflet touches `window` at import time, so it must be dynamically
 // imported inside an effect. Importing it at module scope breaks SSR with
@@ -18,6 +24,8 @@ interface Props {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
+  captainVehicleType?: MapVehicleType;
+  nearbyCaptains?: readonly NearbyCaptain[];
   userLocation?: LatLng | null;
   polyline?: string;
   className?: string;
@@ -28,19 +36,35 @@ interface Props {
 
 function makeDot(L: LeafletNS, color: string, stroke: string, size = 16) {
   const html = `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:${color};border:2px solid ${stroke};box-shadow:0 1px 3px rgba(0,0,0,.25)"></div>`;
-  return L.divIcon({ html, className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
 }
 
-export function LeafletFallbackMap({ 
-  pickup, 
-  drop, 
-  captain, 
-  userLocation, 
-  polyline, 
-  className, 
+const EMPTY_CAPTAINS: readonly NearbyCaptain[] = [];
+const makeVehicle = (L: LeafletNS, type: MapVehicleType, count = 1, assigned = false) =>
+  L.divIcon({
+    html: vehicleMarkerSvg(type, count, assigned),
+    className: "",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+
+export function LeafletFallbackMap({
+  pickup,
+  drop,
+  captain,
+  captainVehicleType = "BIKE",
+  nearbyCaptains = EMPTY_CAPTAINS,
+  userLocation,
+  polyline,
+  className,
   fitKey,
   routeLoading,
-  routeError 
+  routeError,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const LRef = useRef<LeafletNS | null>(null);
@@ -48,6 +72,7 @@ export function LeafletFallbackMap({
   const pickupRef = useRef<LMarker | null>(null);
   const dropRef = useRef<LMarker | null>(null);
   const captainRef = useRef<LMarker | null>(null);
+  const nearbyRefs = useRef<LMarker[]>([]);
   const userRef = useRef<LMarker | null>(null);
   const polyRef = useRef<LPolyline | null>(null);
   const readyRef = useRef(false);
@@ -68,20 +93,44 @@ export function LeafletFallbackMap({
     let cancelled = false;
     const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=polyline`;
     void fetch(url)
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Route request failed (${response.status})`)))
+      .then((response) =>
+        response.ok
+          ? response.json()
+          : Promise.reject(new Error(`Route request failed (${response.status})`)),
+      )
       .then((payload: { routes?: Array<{ geometry?: string }> }) => {
         if (!cancelled) setRoadFallbackPolyline(payload.routes?.[0]?.geometry ?? "");
       })
       .catch(() => {
         if (!cancelled) setRoadFallbackPolyline("");
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [polyline, captain?.lat, captain?.lng, pickup.lat, pickup.lng, drop.lat, drop.lng]);
 
   // Track latest values so the async init effect uses current data.
   const effectivePolyline = polyline || roadFallbackPolyline;
-  const stateRef = useRef({ pickup, drop, captain, userLocation, polyline: effectivePolyline, markers });
-  stateRef.current = { pickup, drop, captain, userLocation, polyline: effectivePolyline, markers };
+  const stateRef = useRef({
+    pickup,
+    drop,
+    captain,
+    captainVehicleType,
+    nearbyCaptains,
+    userLocation,
+    polyline: effectivePolyline,
+    markers,
+  });
+  stateRef.current = {
+    pickup,
+    drop,
+    captain,
+    captainVehicleType,
+    nearbyCaptains,
+    userLocation,
+    polyline: effectivePolyline,
+    markers,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -90,10 +139,10 @@ export function LeafletFallbackMap({
       const L = (mod.default ?? mod) as LeafletNS;
       if (cancelled || !containerRef.current || mapRef.current) return;
       LRef.current = L;
-      const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true }).setView(
-        [stateRef.current.pickup.lat, stateRef.current.pickup.lng],
-        13,
-      );
+      const map = L.map(containerRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+      }).setView([stateRef.current.pickup.lat, stateRef.current.pickup.lng], 13);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
@@ -105,6 +154,7 @@ export function LeafletFallbackMap({
       // Force re-run of dependent effects by touching a state we control.
       // We just call the sync logic directly here.
       applyMarkers();
+      applyNearbyMarkers();
       applyPolyline();
       applyBounds();
     })();
@@ -113,6 +163,13 @@ export function LeafletFallbackMap({
       mapRef.current?.remove();
       mapRef.current = null;
       readyRef.current = false;
+      nearbyRefs.current = [];
+      pickupRef.current = null;
+      dropRef.current = null;
+      captainRef.current = null;
+      userRef.current = null;
+      polyRef.current = null;
+      LRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -121,28 +178,70 @@ export function LeafletFallbackMap({
     const L = LRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
-    const { pickup, drop, captain, userLocation, markers } = stateRef.current;
-    if (!pickupRef.current) pickupRef.current = L.marker([pickup.lat, pickup.lng], { icon: makeDot(L, markers.pickupFill, markers.pickupStroke) }).addTo(map);
-    else pickupRef.current.setLatLng([pickup.lat, pickup.lng]).setIcon(makeDot(L, markers.pickupFill, markers.pickupStroke));
+    const { pickup, drop, captain, captainVehicleType, userLocation, markers } = stateRef.current;
+    if (!pickupRef.current)
+      pickupRef.current = L.marker([pickup.lat, pickup.lng], {
+        icon: makeDot(L, markers.pickupFill, markers.pickupStroke),
+      }).addTo(map);
+    else
+      pickupRef.current
+        .setLatLng([pickup.lat, pickup.lng])
+        .setIcon(makeDot(L, markers.pickupFill, markers.pickupStroke));
 
-    if (!dropRef.current) dropRef.current = L.marker([drop.lat, drop.lng], { icon: makeDot(L, markers.dropFill, markers.dropStroke) }).addTo(map);
-    else dropRef.current.setLatLng([drop.lat, drop.lng]).setIcon(makeDot(L, markers.dropFill, markers.dropStroke));
+    if (!dropRef.current)
+      dropRef.current = L.marker([drop.lat, drop.lng], {
+        icon: makeDot(L, markers.dropFill, markers.dropStroke),
+      }).addTo(map);
+    else
+      dropRef.current
+        .setLatLng([drop.lat, drop.lng])
+        .setIcon(makeDot(L, markers.dropFill, markers.dropStroke));
 
     if (captain) {
-      if (!captainRef.current) captainRef.current = L.marker([captain.lat, captain.lng], { icon: makeDot(L, "#EF4444", "#991B1B", 18) }).addTo(map);
-      else captainRef.current.setLatLng([captain.lat, captain.lng]).setIcon(makeDot(L, "#EF4444", "#991B1B", 18));
+      if (!captainRef.current)
+        captainRef.current = L.marker([captain.lat, captain.lng], {
+          icon: makeVehicle(L, captainVehicleType, 1, true),
+          title: "Your assigned captain",
+          zIndexOffset: 500,
+        }).addTo(map);
+      else
+        captainRef.current
+          .setLatLng([captain.lat, captain.lng])
+          .setIcon(makeVehicle(L, captainVehicleType, 1, true));
     } else if (captainRef.current) {
       captainRef.current.remove();
       captainRef.current = null;
     }
 
     if (userLocation) {
-      if (!userRef.current) userRef.current = L.marker([userLocation.lat, userLocation.lng], { icon: makeDot(L, "#EC4899", "#ffffff", 14) }).addTo(map);
-      else userRef.current.setLatLng([userLocation.lat, userLocation.lng]).setIcon(makeDot(L, "#EC4899", "#ffffff", 14));
+      if (!userRef.current)
+        userRef.current = L.marker([userLocation.lat, userLocation.lng], {
+          icon: makeDot(L, "#EC4899", "#ffffff", 14),
+        }).addTo(map);
+      else
+        userRef.current
+          .setLatLng([userLocation.lat, userLocation.lng])
+          .setIcon(makeDot(L, "#EC4899", "#ffffff", 14));
     } else if (userRef.current) {
       userRef.current.remove();
       userRef.current = null;
     }
+  }
+
+  function applyNearbyMarkers() {
+    const L = LRef.current,
+      map = mapRef.current;
+    if (!L || !map) return;
+    nearbyRefs.current.forEach((marker) => marker.remove());
+    const { nearbyCaptains, captain } = stateRef.current;
+    nearbyRefs.current = visibleNearbyCaptains(nearbyCaptains, captain).map((point) =>
+      L.marker([point.lat, point.lng], {
+        icon: makeVehicle(L, point.vehicleType, point.count),
+        interactive: false,
+        keyboard: false,
+        title: `${point.count} available ${point.vehicleType.toLowerCase()} captain${point.count === 1 ? "" : "s"} nearby · approximate location`,
+      }).addTo(map),
+    );
   }
 
   function applyPolyline() {
@@ -150,7 +249,7 @@ export function LeafletFallbackMap({
     const map = mapRef.current;
     if (!L || !map) return;
     const { polyline, markers, captain } = stateRef.current;
-    
+
     // Clear old polylines
     if ((map as any)._ridePolylines) {
       (map as any)._ridePolylines.forEach((p: any) => p.remove());
@@ -165,25 +264,25 @@ export function LeafletFallbackMap({
     }
 
     if (path.length > 1) {
-        // Find split point for traveled vs remaining
-        const splitIdx = captain ? nearestIndex(path, captain) : 0;
-        const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
-        const remaining = path.slice(Math.max(0, splitIdx));
+      // Find split point for traveled vs remaining
+      const splitIdx = captain ? nearestIndex(path, captain) : 0;
+      const traveled = splitIdx > 0 ? path.slice(0, splitIdx + 1) : [];
+      const remaining = path.slice(Math.max(0, splitIdx));
 
-        if (traveled.length > 1) {
-          const tPoly = L.polyline(
-            traveled.map((p) => [p.lat, p.lng] as [number, number]),
-            { color: markers.routeTraveled, weight: 4, opacity: 0.75, dashArray: "5, 8" }
-          ).addTo(map);
-          (map as any)._ridePolylines.push(tPoly);
-        }
-        
-        const rPoly = L.polyline(
-          remaining.map((p) => [p.lat, p.lng] as [number, number]),
-          { color: markers.routeStroke, weight: 6, opacity: 0.95 }
+      if (traveled.length > 1) {
+        const tPoly = L.polyline(
+          traveled.map((p) => [p.lat, p.lng] as [number, number]),
+          { color: markers.routeTraveled, weight: 4, opacity: 0.75, dashArray: "5, 8" },
         ).addTo(map);
-        (map as any)._ridePolylines.push(rPoly);
+        (map as any)._ridePolylines.push(tPoly);
       }
+
+      const rPoly = L.polyline(
+        remaining.map((p) => [p.lat, p.lng] as [number, number]),
+        { color: markers.routeStroke, weight: 6, opacity: 0.95 },
+      ).addTo(map);
+      (map as any)._ridePolylines.push(rPoly);
+    }
   }
 
   function nearestIndex(path: LatLng[], p: LatLng): number {
@@ -205,20 +304,33 @@ export function LeafletFallbackMap({
     const L = LRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
-    const { pickup, drop, captain, polyline } = stateRef.current;
-    const pts: [number, number][] = [[pickup.lat, pickup.lng], [drop.lat, drop.lng]];
+    const { pickup, drop, captain, nearbyCaptains, polyline } = stateRef.current;
+    const pts: [number, number][] = [
+      [pickup.lat, pickup.lng],
+      [drop.lat, drop.lng],
+    ];
     if (captain) pts.push([captain.lat, captain.lng]);
+    else for (const point of nearbyCaptains) pts.push([point.lat, point.lng]);
     if (polyline) for (const p of decodePolyline(polyline)) pts.push([p.lat, p.lng]);
-    if (pts.length >= 2 && (pickup.lat !== drop.lat || pickup.lng !== drop.lng)) {
+    if (pts.some((point) => point[0] !== pickup.lat || point[1] !== pickup.lng)) {
       map.fitBounds(L.latLngBounds(pts), { padding: [60, 60] });
     } else {
       map.setView([pickup.lat, pickup.lng], 15);
     }
   }
 
-  useEffect(() => { if (readyRef.current) applyMarkers(); }, [pickup, drop, captain, userLocation, markers]);
-  useEffect(() => { if (readyRef.current) applyPolyline(); }, [effectivePolyline, markers, captain]);
-  useEffect(() => { if (readyRef.current) applyBounds(); }, [pickup, drop, captain, polyline, fitKey]);
+  useEffect(() => {
+    if (readyRef.current) applyMarkers();
+  }, [pickup, drop, captain, captainVehicleType, userLocation, markers]);
+  useEffect(() => {
+    if (readyRef.current) applyNearbyMarkers();
+  }, [nearbyCaptains, captain]);
+  useEffect(() => {
+    if (readyRef.current) applyPolyline();
+  }, [effectivePolyline, markers, captain]);
+  useEffect(() => {
+    if (readyRef.current) applyBounds();
+  }, [pickup, drop, captain, polyline, fitKey]);
 
   return (
     <div className={className ?? "relative h-full w-full"}>
@@ -232,7 +344,9 @@ export function LeafletFallbackMap({
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
           <div className="flex flex-col items-center gap-3 rounded-2xl bg-background/90 px-6 py-4 shadow-xl border border-border/50">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="text-xs font-semibold tracking-wide text-foreground/80">Calculating route...</span>
+            <span className="text-xs font-semibold tracking-wide text-foreground/80">
+              Calculating route...
+            </span>
           </div>
         </div>
       )}

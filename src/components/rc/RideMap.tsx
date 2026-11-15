@@ -10,8 +10,12 @@ import {
 
 import { useTheme } from "@/lib/theme";
 import { LeafletFallbackMap } from "@/components/rc/LeafletFallbackMap";
-
-
+import {
+  visibleNearbyCaptains,
+  type NearbyCaptain,
+  type MapVehicleType,
+} from "@/lib/nearby-captains";
+import { vehicleMarkerUrl } from "@/lib/vehicle-markers";
 
 type LatLng = { lat: number; lng: number };
 
@@ -19,7 +23,8 @@ interface RideMapProps {
   pickup: LatLng;
   drop: LatLng;
   captain?: LatLng | null;
-  nearbyCaptains?: LatLng[];
+  nearbyCaptains?: readonly NearbyCaptain[];
+  captainVehicleType?: MapVehicleType;
   userLocation?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
@@ -32,6 +37,8 @@ interface RideMapProps {
   routeError?: string | null;
 }
 
+const EMPTY_CAPTAINS: readonly NearbyCaptain[] = [];
+
 function nearestIndex(path: LatLng[], p: LatLng): number {
   let best = 0;
   let bestD = Infinity;
@@ -39,24 +46,28 @@ function nearestIndex(path: LatLng[], p: LatLng): number {
     const dx = path[i].lat - p.lat;
     const dy = path[i].lng - p.lng;
     const d = dx * dx + dy * dy;
-    if (d < bestD) { bestD = d; best = i; }
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
   }
   return best;
 }
 
-export function RideMap({ 
-  pickup, 
-  drop, 
-  captain, 
-  nearbyCaptains = [],
-  userLocation, 
-  polyline, 
-  className, 
-  fitKey, 
-  recenterKey, 
+export function RideMap({
+  pickup,
+  drop,
+  captain,
+  nearbyCaptains = EMPTY_CAPTAINS,
+  captainVehicleType = "BIKE",
+  userLocation,
+  polyline,
+  className,
+  fitKey,
+  recenterKey,
   recenterTarget,
   routeLoading,
-  routeError
+  routeError,
 }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
@@ -71,11 +82,12 @@ export function RideMap({
   const [mapReady, setMapReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+  const viewRef = useRef({ pickup, drop, captain, nearbyCaptains });
+  viewRef.current = { pickup, drop, captain, nearbyCaptains };
 
   const { markers, version } = useTheme();
   const markersRef = useRef(markers);
   markersRef.current = markers;
-
 
   // Init map once
   useEffect(() => {
@@ -118,7 +130,6 @@ export function RideMap({
         const painted = containerRef.current?.querySelector(".gm-style");
         if (!painted) setLoadError("Google Maps did not render on this device");
       }, 4000);
-
 
       pickupMarkerRef.current = new g.maps.Marker({
         position: pickup,
@@ -167,10 +178,19 @@ export function RideMap({
       pickupMarkerRef.current?.setMap(null);
       dropMarkerRef.current?.setMap(null);
       captainMarkerRef.current?.setMap(null);
+      nearbyCaptainMarkersRef.current.forEach((marker) => marker.setMap(null));
+      nearbyCaptainMarkersRef.current = [];
       userMarkerRef.current?.setMap(null);
       userAccuracyRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
       traveledRef.current?.setMap(null);
+      captainMarkerRef.current = null;
+      pickupMarkerRef.current = null;
+      dropMarkerRef.current = null;
+      userMarkerRef.current = null;
+      userAccuracyRef.current = null;
+      polylineRef.current = null;
+      traveledRef.current = null;
       mapRef.current = null;
     };
 
@@ -195,9 +215,11 @@ export function RideMap({
       // Nudge Google Maps to re-measure, then restore framing.
       window.dispatchEvent(new Event("resize"));
       const bounds = new g.maps.LatLngBounds();
-      bounds.extend(pickup);
-      bounds.extend(drop);
-      if (captain) bounds.extend(captain);
+      const current = viewRef.current;
+      bounds.extend(current.pickup);
+      bounds.extend(current.drop);
+      if (current.captain) bounds.extend(current.captain);
+      else for (const point of current.nearbyCaptains) bounds.extend(point);
       for (const pt of pathRef.current) bounds.extend(pt);
       mapRef.current.fitBounds(bounds, 60);
     });
@@ -205,8 +227,6 @@ export function RideMap({
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady]);
-
-
 
   // Decode polyline once per change and keep it for both drawing and bounds fitting.
   const pathRef = useRef<LatLng[]>([]);
@@ -271,7 +291,11 @@ export function RideMap({
       setZoom: (z: number) => void;
       fitBounds: (b: unknown, padding?: number | object) => void;
     };
-    const same = pickup.lat === drop.lat && pickup.lng === drop.lng && !captain && pathRef.current.length === 0;
+    const same =
+      pickup.lat === drop.lat &&
+      pickup.lng === drop.lng &&
+      !captain &&
+      nearbyCaptains.every((point) => point.lat === pickup.lat && point.lng === pickup.lng);
     if (same) {
       map.setCenter(pickup);
       map.setZoom(15);
@@ -281,10 +305,10 @@ export function RideMap({
     bounds.extend(pickup);
     bounds.extend(drop);
     if (captain) bounds.extend(captain);
+    else for (const point of nearbyCaptains) bounds.extend(point);
     for (const pt of pathRef.current) bounds.extend(pt);
     map.fitBounds(bounds, { top: 120, bottom: 80, left: 60, right: 60 } as unknown as number);
   }, [pickup, drop, captain, polyline, fitKey, mapReady]);
-
 
   // Update captain marker
   useEffect(() => {
@@ -299,36 +323,45 @@ export function RideMap({
       captainMarkerRef.current = new g.maps.Marker({
         position: captain,
         map: mapRef.current,
-        title: "Captain",
+        title: "Your assigned captain",
+        zIndex: 7,
         icon: {
-          path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z",
-          scale: 1.4,
-          fillColor: "#EF4444",
-          fillOpacity: 1,
-          strokeColor: "#991B1B",
-          strokeWeight: 2,
-          rotation: 0,
+          url: vehicleMarkerUrl(captainVehicleType, 1, true),
+          scaledSize: new g.maps.Size(40, 40),
+          anchor: new g.maps.Point(20, 20),
         },
       });
     } else {
       captainMarkerRef.current.setPosition(captain);
+      captainMarkerRef.current.setIcon({
+        url: vehicleMarkerUrl(captainVehicleType, 1, true),
+        scaledSize: new g.maps.Size(40, 40),
+        anchor: new g.maps.Point(20, 20),
+      });
     }
-  }, [captain]);
+  }, [captain, captainVehicleType, mapReady]);
 
   // Availability scooters are approximate, anonymous nearby captain markers.
   useEffect(() => {
     const g = window.google;
     if (!mapRef.current || !g) return;
     nearbyCaptainMarkersRef.current.forEach((marker) => marker.setMap(null));
-    nearbyCaptainMarkersRef.current = nearbyCaptains.map((position) => new g.maps.Marker({
-      position,
-      map: mapRef.current,
-      title: "Available captain nearby",
-      clickable: false,
-      zIndex: 3,
-      label: { text: "🛵", fontSize: "18px" },
-    }));
-  }, [nearbyCaptains, mapReady]);
+    nearbyCaptainMarkersRef.current = visibleNearbyCaptains(nearbyCaptains, captain).map(
+      (position) =>
+        new g.maps.Marker({
+          position: { lat: position.lat, lng: position.lng },
+          map: mapRef.current,
+          title: `${position.count} available ${position.vehicleType.toLowerCase()} captain${position.count === 1 ? "" : "s"} nearby · approximate location`,
+          clickable: false,
+          zIndex: 3,
+          icon: {
+            url: vehicleMarkerUrl(position.vehicleType, position.count),
+            scaledSize: new g.maps.Size(40, 40),
+            anchor: new g.maps.Point(20, 20),
+          },
+        }),
+    );
+  }, [nearbyCaptains, captain, mapReady]);
 
   // User's live location marker (blue dot).
   useEffect(() => {
@@ -385,29 +418,37 @@ export function RideMap({
     const g = window.google;
     if (!g || !mapReady) return;
     pickupMarkerRef.current?.setIcon({
-      path: g.maps.SymbolPath.CIRCLE, scale: 9,
-      fillColor: markers.pickupFill, fillOpacity: 1,
-      strokeColor: markers.pickupStroke, strokeWeight: 2,
+      path: g.maps.SymbolPath.CIRCLE,
+      scale: 9,
+      fillColor: markers.pickupFill,
+      fillOpacity: 1,
+      strokeColor: markers.pickupStroke,
+      strokeWeight: 2,
     });
     dropMarkerRef.current?.setIcon({
-      path: g.maps.SymbolPath.CIRCLE, scale: 9,
-      fillColor: markers.dropFill, fillOpacity: 1,
-      strokeColor: markers.dropStroke, strokeWeight: 2,
-    });
-    captainMarkerRef.current?.setIcon({
-      path: "M -6 -3 L 6 -3 L 8 0 L 6 3 L -6 3 L -8 0 Z", scale: 1.4,
-      fillColor: "#EF4444", fillOpacity: 1,
-      strokeColor: "#991B1B", strokeWeight: 2, rotation: 0,
+      path: g.maps.SymbolPath.CIRCLE,
+      scale: 9,
+      fillColor: markers.dropFill,
+      fillOpacity: 1,
+      strokeColor: markers.dropStroke,
+      strokeWeight: 2,
     });
     userMarkerRef.current?.setIcon({
-      path: g.maps.SymbolPath.CIRCLE, scale: 7,
-      fillColor: "#EC4899", fillOpacity: 1,
-      strokeColor: "#ffffff", strokeWeight: 2,
+      path: g.maps.SymbolPath.CIRCLE,
+      scale: 7,
+      fillColor: "#EC4899",
+      fillOpacity: 1,
+      strokeColor: "#ffffff",
+      strokeWeight: 2,
     });
     userAccuracyRef.current?.setIcon({
-      path: g.maps.SymbolPath.CIRCLE, scale: 22,
-      fillColor: "#EC4899", fillOpacity: 0.15,
-      strokeColor: "#EC4899", strokeOpacity: 0.25, strokeWeight: 1,
+      path: g.maps.SymbolPath.CIRCLE,
+      scale: 22,
+      fillColor: "#EC4899",
+      fillOpacity: 0.15,
+      strokeColor: "#EC4899",
+      strokeOpacity: 0.25,
+      strokeWeight: 1,
     });
   }, [markers, mapReady]);
 
@@ -430,6 +471,8 @@ export function RideMap({
           pickup={pickup}
           drop={drop}
           captain={captain}
+          captainVehicleType={captainVehicleType}
+          nearbyCaptains={nearbyCaptains}
           userLocation={userLocation}
           polyline={polyline}
           fitKey={fitKey}
@@ -438,7 +481,12 @@ export function RideMap({
           className="absolute inset-0"
         />
         <button
-          onClick={() => { resetGoogleMapsLoader(); setLoadError(null); setMapReady(false); setRetryTick((n) => n + 1); }}
+          onClick={() => {
+            resetGoogleMapsLoader();
+            setLoadError(null);
+            setMapReady(false);
+            setRetryTick((n) => n + 1);
+          }}
           className="absolute bottom-3 left-3 z-[1000] rounded-full bg-background/95 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-md border border-border/50"
         >
           Using OpenStreetMap · retry Google Maps
@@ -450,13 +498,15 @@ export function RideMap({
   return (
     <div className={className ?? "relative h-full w-full"}>
       <div ref={containerRef} className="absolute inset-0 bg-muted" />
-      
+
       {/* Loading State Overlays */}
       {routeLoading && (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
           <div className="flex flex-col items-center gap-3 rounded-2xl bg-background/90 px-6 py-4 shadow-xl border border-border/50 animate-in fade-in zoom-in duration-300">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="text-xs font-semibold tracking-wide text-foreground/80">Calculating route...</span>
+            <span className="text-xs font-semibold tracking-wide text-foreground/80">
+              Calculating route...
+            </span>
           </div>
         </div>
       )}
@@ -475,13 +525,19 @@ export function RideMap({
       )}
 
       {/* Empty State / Prompt */}
-      {!polyline && !routeLoading && !routeError && pickup.lat === drop.lat && pickup.lng === drop.lng && (
-        <div className="absolute top-4 left-1/2 z-[1000] -translate-x-1/2 pointer-events-none">
-          <div className="rounded-full bg-background/95 px-4 py-2 shadow-lg border border-border/50 animate-in slide-in-from-top-4 duration-500">
-             <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">Choose a destination to see the route</span>
+      {!polyline &&
+        !routeLoading &&
+        !routeError &&
+        pickup.lat === drop.lat &&
+        pickup.lng === drop.lng && (
+          <div className="absolute top-4 left-1/2 z-[1000] -translate-x-1/2 pointer-events-none">
+            <div className="rounded-full bg-background/95 px-4 py-2 shadow-lg border border-border/50 animate-in slide-in-from-top-4 duration-500">
+              <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                Choose a destination to see the route
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }
