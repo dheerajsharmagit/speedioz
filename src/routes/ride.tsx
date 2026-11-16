@@ -13,6 +13,9 @@ import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
 import { NearbyCaptains, VehicleSymbol } from "@/components/rc/NearbyCaptains";
+import { LiveTrackingStatus } from "@/components/rc/LiveTrackingStatus";
+import { mergeTrackingFix, trackingPhase, trackingIsFresh, trackingTarget, type TrackingFix } from "@/lib/live-tracking";
+import { useTrackingRoute } from "@/lib/use-tracking-route";
 import {
   canShowNearbyCaptains,
   isCaptainTracking,
@@ -425,14 +428,14 @@ function RidePage() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
-  const [approachPolyline, setApproachPolyline] = useState<string>("");
-  const [captainPos, setCaptainPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [captainPos, setCaptainPos] = useState<TrackingFix | null>(null);
+  const [trackingNow, setTrackingNow] = useState(Date.now);
+  const [trackingConnected, setTrackingConnected] = useState(false);
   const [rating, setRating] = useState(0);
   const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
-  const approachFetchedRef = useRef<string | null>(null);
   const firstFixRef = useRef(false);
 
   const [routeInfo, setRouteInfo] = useState<{
@@ -599,7 +602,14 @@ function RidePage() {
     });
 
     let disposed = false;
+    let fetching = false;
+    let refreshAgain = false;
+    let assignedCaptainId: string | null = null;
     const refreshBooking = async () => {
+      if (disposed) return;
+      if (fetching) { refreshAgain = true; return; }
+      fetching = true;
+      const requestedAt = Date.now();
       try {
         const response = await rideApi.bookingDetails(ride.id);
         if (disposed || cancellationRef.current) return;
@@ -628,9 +638,15 @@ function RidePage() {
             setStep(next);
           }
         }
-        setCaptainPos(response.data.captainLocation ?? null);
+        const nextCaptainId = response.data.captain?.id ?? null;
+        const reassigned = assignedCaptainId !== null && assignedCaptainId !== nextCaptainId;
+        assignedCaptainId = nextCaptainId;
+        setCaptainPos((current) => nextCaptainId ? mergeTrackingFix(reassigned ? null : current, response.data.captainLocation, requestedAt) : null);
       } catch (error) {
         console.warn("Could not refresh ride booking details", error);
+      } finally {
+        fetching = false;
+        if (refreshAgain && !disposed) { refreshAgain = false; void refreshBooking(); }
       }
     };
 
@@ -640,6 +656,7 @@ function RidePage() {
         rideId?: string;
         otp?: string;
         captain?: {
+          id?: string;
           name?: string;
           phone?: string | null;
           avatarUrl?: string | null;
@@ -648,9 +665,9 @@ function RidePage() {
           vehicleNumber?: string;
           rating?: number;
         };
-        captainLocation?: { lat: number; lng: number } | null;
+        captainLocation?: { lat: number; lng: number; at?: string } | null;
       }) => {
-        if (data.rideId !== ride.id || !canApplyRideProgress(stepRef.current, "matched")) return;
+        if (disposed || data.rideId !== ride.id || !canApplyRideProgress(stepRef.current, "matched")) return;
         setRide((current) =>
           current
             ? {
@@ -671,44 +688,54 @@ function RidePage() {
               }
             : current,
         );
-        setCaptainPos(data.captainLocation ?? null);
+        const reassigned = assignedCaptainId !== null && assignedCaptainId !== data.captain?.id;
+        assignedCaptainId = data.captain?.id ?? assignedCaptainId;
+        setCaptainPos((current) => mergeTrackingFix(reassigned ? null : current, data.captainLocation));
         awaitingPaymentRef.current = false;
         setRedispatching(false);
+        stepRef.current = "matched";
         setStep("matched");
         void refreshBooking();
       },
     );
-    socket.on("captain:location", (data: { rideId?: string; lat?: number; lng?: number }) => {
-      if (data.rideId !== ride.id || typeof data.lat !== "number" || typeof data.lng !== "number")
+    socket.on("captain:location", (data: { rideId?: string; captainId?: string; lat?: number; lng?: number; at?: string }) => {
+      if (disposed || data.rideId !== ride.id || typeof data.lat !== "number" || typeof data.lng !== "number")
         return;
-      setCaptainPos({ lat: data.lat, lng: data.lng });
+      if (!trackingPhase(stepRef.current) || (data.captainId && assignedCaptainId && data.captainId !== assignedCaptainId)) return;
+      setCaptainPos((current) => mergeTrackingFix(current, data));
       setRide((current) =>
         current ? { ...current, captain_lat: data.lat, captain_lng: data.lng } : current,
       );
     });
     socket.on("ride:searching", (data: { rideId?: string }) => {
+      if (disposed) return;
       if (data?.rideId && data.rideId !== ride.id) return;
       const prev = stepRef.current;
       if (prev === "matched" || prev === "arriving") {
         setRedispatching(true);
         setCaptainPos(null);
-        setApproachPolyline("");
+        assignedCaptainId = null;
+        stepRef.current = "searching";
         setStep("searching");
       }
     });
-    socket.on("ride:arriving", refreshBooking);
-    socket.on("ride:started", refreshBooking);
-    socket.on("ride:completed", refreshBooking);
-    socket.on("payment:updated", refreshBooking);
+    const refreshThisRide = (data: { rideId?: string }) => { if (data?.rideId === ride.id) void refreshBooking(); };
+    socket.on("ride:arriving", refreshThisRide);
+    socket.on("ride:started", refreshThisRide);
+    socket.on("ride:completed", refreshThisRide);
+    socket.on("payment:updated", refreshThisRide);
+    socket.on("connect", () => { setTrackingConnected(true); void refreshBooking(); });
+    socket.on("disconnect", () => setTrackingConnected(false));
+    socket.io.on("reconnect_attempt", () => { socket.auth = { token: storage.getAccessToken() }; });
     socket.on("ride:cancelled", (data: { rideId?: string; status?: string }) => {
-      if (data.rideId === ride.id) {
+      if (!disposed && data.rideId === ride.id) {
         awaitingPaymentRef.current = false;
         setPaymentIntent(null);
         // Cancellation is terminal. Clear the active booking immediately so
         // the rider is not trapped on a stale matched/current-ride screen.
         setRide(null);
-        setApproachPolyline("");
         setCaptainPos(null);
+        stepRef.current = "destination";
         setStep("destination");
       }
     });
@@ -717,42 +744,33 @@ function RidePage() {
     // portal in sync when Socket.IO is blocked by browser or deployment CORS.
     void refreshBooking();
     const pollId = window.setInterval(() => void refreshBooking(), 5000);
+    const refresh = () => void refreshBooking();
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
 
     return () => {
       disposed = true;
+      socket.removeAllListeners();
       socket.disconnect();
+      setTrackingConnected(false);
       window.clearInterval(pollId);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, [ride?.id]);
 
-  // Fetch captain -> pickup route once we have a captain position (matching/pickup phase)
+  const livePhase = trackingPhase(step);
   useEffect(() => {
-    if (!ride || !captainPos) return;
-    if (ride.status !== "accepted" && ride.status !== "arriving") {
-      setApproachPolyline("");
-      approachFetchedRef.current = null;
-      return;
-    }
-    // Recompute when the captain's live position changes; otherwise the
-    // approach line stays anchored at the first reported location.
-    const approachKey = `${ride.id}:${captainPos.lat.toFixed(5)}:${captainPos.lng.toFixed(5)}`;
-    if (approachFetchedRef.current === approachKey) return;
-    approachFetchedRef.current = approachKey;
-    (async () => {
-      try {
-        const res = await computeRoute({
-          data: {
-            origin: { lat: captainPos.lat, lng: captainPos.lng },
-            destination: { lat: ride.pickup_lat, lng: ride.pickup_lng },
-            travelMode: ["auto", "cab"].includes(ride.vehicle_type) ? "DRIVE" : "TWO_WHEELER",
-          },
-        });
-        setApproachPolyline(res.encodedPolyline);
-      } catch (e) {
-        console.warn("approach route failed", e);
-      }
-    })();
-  }, [ride?.id, ride?.status, captainPos]);
+    if (!livePhase) return;
+    setTrackingNow(Date.now());
+    const timer = window.setInterval(() => setTrackingNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [livePhase]);
+  const liveRoute = useTrackingRoute({ rideId: ride?.id, phase: livePhase, fix: captainPos,
+    target: trackingTarget(livePhase,
+      { lat: ride?.pickup_lat ?? pickup.lat, lng: ride?.pickup_lng ?? pickup.lng },
+      { lat: ride?.drop_lat ?? dest?.lat ?? pickup.lat, lng: ride?.drop_lng ?? dest?.lng ?? pickup.lng }),
+    driving: ["auto", "cab"].includes(ride?.vehicle_type ?? selected) });
 
   // Compute polyline when destination is picked
   useEffect(() => {
@@ -1017,7 +1035,6 @@ function RidePage() {
       await cancelAcceptedRide(ride.id);
       clearPendingRide();
       setRedispatching(false);
-      setApproachPolyline("");
       setCaptainPos(null);
       setStep("cancelled");
     } finally {
@@ -1031,8 +1048,6 @@ function RidePage() {
     setRedispatching(false);
     setEncodedPolyline("");
     setRouteSteps([]);
-    setApproachPolyline("");
-    approachFetchedRef.current = null;
     setCaptainPos(null);
     setStep("confirm");
   }
@@ -1055,9 +1070,7 @@ function RidePage() {
     setDest(null);
     setDestQuery("");
     setEncodedPolyline("");
-    setApproachPolyline("");
     setRouteSteps([]);
-    approachFetchedRef.current = null;
     setCaptainPos(null);
     setRating(0);
     setTip(0);
@@ -1065,22 +1078,22 @@ function RidePage() {
     setStep("destination");
   }
 
-  const mapPickup = { lat: pickup.lat, lng: pickup.lng };
-  const mapDrop = dest
-    ? { lat: dest.lat, lng: dest.lng }
-    : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 };
+  const mapPickup = useMemo(() => ({ lat: ride?.pickup_lat ?? pickup.lat, lng: ride?.pickup_lng ?? pickup.lng }), [ride?.pickup_lat, ride?.pickup_lng, pickup.lat, pickup.lng]);
+  const mapDrop = useMemo(() => ride
+    ? { lat: ride.drop_lat, lng: ride.drop_lng }
+    : dest ? { lat: dest.lat, lng: dest.lng }
+    : { lat: pickup.lat + 0.03, lng: pickup.lng + 0.03 }, [ride?.drop_lat, ride?.drop_lng, dest?.lat, dest?.lng, pickup.lat, pickup.lng]);
 
   // Which polyline to draw: captain approach during matching/pickup, main route otherwise.
-  const activePolyline =
-    (step === "matched" || step === "arriving") && approachPolyline
-      ? approachPolyline
-      : encodedPolyline;
+  const activePolyline = livePhase ? liveRoute?.encodedPolyline || (livePhase === "trip" ? encodedPolyline : "") : encodedPolyline;
 
   // Live ETA (in minutes) — haversine distance / assumed average speed.
   const etaTarget =
     step === "matched" || step === "arriving" ? mapPickup : step === "inprogress" ? mapDrop : null;
   const etaMinutes =
-    captainPos && etaTarget ? computeEtaMinutes(captainPos, etaTarget, selected) : null;
+    captainPos && etaTarget && trackingIsFresh(captainPos, trackingNow)
+      ? liveRoute?.durationSeconds ? Math.max(1, Math.ceil(liveRoute.durationSeconds / 60)) : computeEtaMinutes(captainPos, etaTarget, selected)
+      : null;
   const etaLabel =
     step === "matched" || step === "arriving"
       ? "Captain arriving in"
@@ -1185,6 +1198,7 @@ function RidePage() {
             drop={dest ? mapDrop : mapPickup}
             captain={mapCaptain}
             captainVehicleType={mapType}
+            trackingPhase={livePhase}
             nearbyCaptains={nearbyCaptains}
             userLocation={userLocation}
             polyline={dest ? activePolyline : ""}
@@ -1192,11 +1206,12 @@ function RidePage() {
             routeError={routeError}
             fitKey={`${step}:${mapType}:${nearby ? "ready" : "pending"}`}
             recenterKey={recenterKey}
-            recenterTarget={userLocation ?? mapPickup}
+            recenterTarget={(trackingCaptain ? mapCaptain : userLocation) ?? mapPickup}
             className="absolute inset-0"
           />
 
-          {(showNearby || trackingCaptain) && (
+          {livePhase && <LiveTrackingStatus phase={livePhase} fix={captainPos} now={trackingNow} connected={trackingConnected} />}
+          {showNearby && (
             <NearbyCaptains
               type={mapType}
               count={nearby?.counts[mapType] ?? null}
@@ -1216,13 +1231,13 @@ function RidePage() {
           <button
             type="button"
             onClick={() => {
-              if (userLocation) {
+              if ((trackingCaptain && mapCaptain) || userLocation) {
                 setRecenterKey((k) => k + 1);
               } else {
                 requestGeolocation();
               }
             }}
-            aria-label="Recenter map on my location"
+            aria-label={trackingCaptain ? "Recenter map on captain" : "Recenter map on my location"}
             className="absolute right-4 top-24 grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
           >
             <svg

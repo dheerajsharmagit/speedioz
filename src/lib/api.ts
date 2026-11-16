@@ -509,7 +509,7 @@ export type BookingDetails = {
     vehicleModel: string | null;
     rating: number | null;
   } | null;
-  captainLocation: { lat: number; lng: number } | null;
+  captainLocation: { lat: number; lng: number; at?: string; heading?: number; speed?: number } | null;
   customer?: { name?: string; phone?: string | null } | null;
   otp?: string;
   paymentMethod?: "CASH" | "CARD" | "UPI" | "WALLET";

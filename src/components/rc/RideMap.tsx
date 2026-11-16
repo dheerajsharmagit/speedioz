@@ -16,6 +16,7 @@ import {
   type MapVehicleType,
 } from "@/lib/nearby-captains";
 import { vehicleMarkerUrl } from "@/lib/vehicle-markers";
+import type { TrackingPhase } from "@/lib/live-tracking";
 
 type LatLng = { lat: number; lng: number };
 
@@ -25,6 +26,7 @@ interface RideMapProps {
   captain?: LatLng | null;
   nearbyCaptains?: readonly NearbyCaptain[];
   captainVehicleType?: MapVehicleType;
+  trackingPhase?: TrackingPhase | null;
   userLocation?: LatLng | null;
   polyline?: string; // encoded polyline (full active route)
   className?: string;
@@ -60,6 +62,7 @@ export function RideMap({
   captain,
   nearbyCaptains = EMPTY_CAPTAINS,
   captainVehicleType = "BIKE",
+  trackingPhase = null,
   userLocation,
   polyline,
   className,
@@ -248,11 +251,11 @@ export function RideMap({
     pathRef.current = [];
     if (!polyline) {
       // If no polyline, draw a straight line between pickup and drop as fallback
-      pathRef.current = [pickup, drop];
+      pathRef.current = [captain ?? pickup, trackingPhase === "pickup" ? pickup : drop];
     } else {
       const decoded = g.maps.geometry.encoding.decodePath(polyline);
       if (!decoded || decoded.length === 0) {
-        pathRef.current = [pickup, drop];
+        pathRef.current = [captain ?? pickup, trackingPhase === "pickup" ? pickup : drop];
       } else {
         pathRef.current = decoded.map((p) => ({ lat: p.lat(), lng: p.lng() }));
       }
@@ -279,7 +282,7 @@ export function RideMap({
       strokeWeight: 6,
       map: mapRef.current,
     });
-  }, [polyline, captain, mapReady, version]);
+  }, [polyline, captain, trackingPhase, mapReady, version]);
 
   // Auto-fit bounds around pickup, drop, captain, AND the full route polyline.
   // Re-runs whenever any of these change or the parent bumps `fitKey` (e.g. step change).
@@ -472,10 +475,13 @@ export function RideMap({
           drop={drop}
           captain={captain}
           captainVehicleType={captainVehicleType}
+          trackingPhase={trackingPhase}
           nearbyCaptains={nearbyCaptains}
           userLocation={userLocation}
           polyline={polyline}
           fitKey={fitKey}
+          recenterKey={recenterKey}
+          recenterTarget={recenterTarget}
           routeLoading={routeLoading}
           routeError={routeError}
           className="absolute inset-0"

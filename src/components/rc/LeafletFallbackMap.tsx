@@ -8,6 +8,7 @@ import {
   type MapVehicleType,
 } from "@/lib/nearby-captains";
 import { vehicleMarkerSvg } from "@/lib/vehicle-markers";
+import type { TrackingPhase } from "@/lib/live-tracking";
 
 // NOTE: Leaflet touches `window` at import time, so it must be dynamically
 // imported inside an effect. Importing it at module scope breaks SSR with
@@ -25,11 +26,14 @@ interface Props {
   drop: LatLng;
   captain?: LatLng | null;
   captainVehicleType?: MapVehicleType;
+  trackingPhase?: TrackingPhase | null;
   nearbyCaptains?: readonly NearbyCaptain[];
   userLocation?: LatLng | null;
   polyline?: string;
   className?: string;
   fitKey?: string;
+  recenterKey?: number;
+  recenterTarget?: LatLng | null;
   routeLoading?: boolean;
   routeError?: string | null;
 }
@@ -58,11 +62,14 @@ export function LeafletFallbackMap({
   drop,
   captain,
   captainVehicleType = "BIKE",
+  trackingPhase = null,
   nearbyCaptains = EMPTY_CAPTAINS,
   userLocation,
   polyline,
   className,
   fitKey,
+  recenterKey,
+  recenterTarget,
   routeLoading,
   routeError,
 }: Props) {
@@ -78,6 +85,11 @@ export function LeafletFallbackMap({
   const readyRef = useRef(false);
   const [roadFallbackPolyline, setRoadFallbackPolyline] = useState("");
   const { markers } = useTheme();
+  useEffect(() => {
+    if (readyRef.current && recenterTarget) mapRef.current?.panTo([recenterTarget.lat, recenterTarget.lng], { animate: true });
+  }, [recenterKey]);
+  const routingRef = useRef({ captain, pickup, drop, trackingPhase });
+  routingRef.current = { captain, pickup, drop, trackingPhase };
 
   // Google routing can be unavailable on a deployed customer portal. Fetch a
   // road-following geometry directly for the Leaflet backup map instead of
@@ -87,12 +99,17 @@ export function LeafletFallbackMap({
       setRoadFallbackPolyline("");
       return;
     }
-    const origin = captain ?? pickup;
-    const destination = captain ? pickup : drop;
-    if (origin.lat === destination.lat && origin.lng === destination.lng) return;
     let cancelled = false;
-    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=polyline`;
-    void fetch(url)
+    let fetching = false;
+    const refresh = async () => {
+      if (cancelled || fetching) return;
+      const { captain, pickup, drop, trackingPhase } = routingRef.current;
+      const origin = captain ?? pickup;
+      const destination = captain && trackingPhase !== "trip" ? pickup : drop;
+      if (origin.lat === destination.lat && origin.lng === destination.lng) { setRoadFallbackPolyline(""); return; }
+      fetching = true;
+      const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=polyline`;
+      await fetch(url)
       .then((response) =>
         response.ok
           ? response.json()
@@ -103,11 +120,16 @@ export function LeafletFallbackMap({
       })
       .catch(() => {
         if (!cancelled) setRoadFallbackPolyline("");
-      });
+      }).finally(() => { fetching = false; });
+    };
+    setRoadFallbackPolyline("");
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [polyline, captain?.lat, captain?.lng, pickup.lat, pickup.lng, drop.lat, drop.lng]);
+  }, [polyline, !!captain, trackingPhase, pickup.lat, pickup.lng, drop.lat, drop.lng]);
 
   // Track latest values so the async init effect uses current data.
   const effectivePolyline = polyline || roadFallbackPolyline;
@@ -116,6 +138,7 @@ export function LeafletFallbackMap({
     drop,
     captain,
     captainVehicleType,
+    trackingPhase,
     nearbyCaptains,
     userLocation,
     polyline: effectivePolyline,
@@ -126,6 +149,7 @@ export function LeafletFallbackMap({
     drop,
     captain,
     captainVehicleType,
+    trackingPhase,
     nearbyCaptains,
     userLocation,
     polyline: effectivePolyline,
@@ -248,7 +272,7 @@ export function LeafletFallbackMap({
     const L = LRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
-    const { polyline, markers, captain } = stateRef.current;
+    const { polyline, markers, captain, trackingPhase, pickup, drop } = stateRef.current;
 
     // Clear old polylines
     if ((map as any)._ridePolylines) {
@@ -260,7 +284,7 @@ export function LeafletFallbackMap({
     if (polyline) {
       path = decodePolyline(polyline);
     } else if (pickup.lat !== drop.lat || pickup.lng !== drop.lng) {
-      path = [pickup, drop];
+      path = [captain ?? pickup, trackingPhase === "pickup" ? pickup : drop];
     }
 
     if (path.length > 1) {
