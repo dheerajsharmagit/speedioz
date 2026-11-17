@@ -54,6 +54,8 @@ export type AuthResponse = {
 };
 
 export type GoogleConfiguration = { enabled: boolean; clientId: string | null };
+export type OtpConfiguration = { configured: boolean; provider: string; codeLength: number; expiresInSeconds: number; resendAfterSeconds: number };
+export type OtpSent = { sent: boolean; expiresInSeconds: number; resendAfterSeconds: number };
 
 export type ApiError = {
   code: string;
@@ -270,8 +272,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 // Auth methods
 export const authApi = {
-  signup: (data: any) =>
+  signup: (data: { name: string; email: string; phone: string; otp: string }) =>
     api<AuthResponse>("/auth/signup/customer", { method: "POST", body: JSON.stringify(data) }),
+  otpConfiguration: async () => (await api<{ data: OtpConfiguration }>("/auth/otp/config")).data,
+  sendOtp: async (phone: string, purpose: "LOGIN" | "SIGNUP") => (await api<{ data: OtpSent }>("/auth/otp/send", {
+    method: "POST", body: JSON.stringify({ phone, purpose, expectedRole: "CUSTOMER" })
+  })).data,
+  verifyOtp: (phone: string, code: string) => api<AuthResponse>("/auth/otp/verify", {
+    method: "POST", body: JSON.stringify({ phone, code, purpose: "LOGIN", expectedRole: "CUSTOMER" })
+  }),
   login: (data: { email: string; password: string; expectedRole?: "CUSTOMER" }) =>
     api<AuthResponse>("/auth/login", {
       method: "POST",
