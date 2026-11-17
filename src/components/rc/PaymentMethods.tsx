@@ -1,4 +1,5 @@
 import type { PaymentConfiguration } from "@/lib/api";
+import { Banknote, Wallet } from "lucide-react";
 import { isPaymentMethodAvailable, needsOnlinePayment, type ClientPayment } from "@/lib/payments";
 
 export function PaymentMethods({
@@ -31,10 +32,8 @@ export function PaymentMethods({
   ];
   const onlineAvailable = configuration?.configured && configuration.provider === "razorpay";
   return (
-    <div className="mb-6 px-6">
-      <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        Payment
-      </p>
+    <section className="space-y-3" aria-label="Payment options">
+      <h3 className="text-sm font-semibold">How would you like to pay?</h3>
       {configuration?.mode === "test" && payment === "wallet" && (
         <p className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs">
           Test wallet: top-ups use test money, separate from your real balance.
@@ -62,7 +61,7 @@ export function PaymentMethods({
           </button>
         </div>
       )}
-      <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-2 gap-2">
+      <div role="radiogroup" aria-label="Payment method" className="space-y-2">
         {methods.map((method) => {
           const active = method.id === payment;
           const available =
@@ -75,26 +74,37 @@ export function PaymentMethods({
               aria-checked={active}
               disabled={!available}
               onClick={() => onChange(method.id)}
-              className={`rounded-2xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                active
-                  ? "border-foreground bg-secondary text-secondary-foreground"
-                  : "border-border bg-background"
+              className={`flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                active ? "border-primary bg-primary/5" : "border-border bg-card"
               }`}
             >
-              <p className="text-sm font-bold">{method.label}</p>
-              <p
-                className={`mt-1 text-[10px] ${active ? "text-secondary-foreground/60" : "text-muted-foreground"}`}
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-primary">
+                {method.id === "wallet" ? (
+                  <Wallet aria-hidden className="size-5" />
+                ) : (
+                  <Banknote aria-hidden className="size-5" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">{method.label}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                  {available
+                    ? method.sub
+                    : checking
+                      ? "Checking availability…"
+                      : "Currently unavailable"}
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className={`grid size-4 shrink-0 place-items-center rounded-full border ${active ? "border-primary" : "border-muted-foreground/40"}`}
               >
-                {available
-                  ? method.sub
-                  : checking
-                    ? "Checking availability…"
-                    : "Currently unavailable"}
-              </p>
+                {active && <span className="size-2 rounded-full bg-primary" />}
+              </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

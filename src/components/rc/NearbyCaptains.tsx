@@ -57,7 +57,7 @@ export function NearbyCaptains({
           ? "Finding nearby captains…"
           : `${count} ${mapVehicleName(type)} captain${count === 1 ? "" : "s"} nearby`;
   return (
-    <div className="absolute left-4 top-24 z-[1000] flex max-w-[calc(100%-5.5rem)] items-center gap-2.5 rounded-2xl border border-border/60 bg-card/95 px-3 py-2.5 text-foreground shadow-lg backdrop-blur">
+    <div className="absolute left-4 top-4 z-[1000] flex max-w-[calc(100%-2rem)] items-center gap-2.5 rounded-2xl border border-border/60 bg-card/95 px-3 py-2.5 text-foreground shadow-sm backdrop-blur">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-secondary">
         <VehicleSymbol type={type} />
       </span>

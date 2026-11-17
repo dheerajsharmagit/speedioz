@@ -14,8 +14,17 @@ type Suggestion = { id: string; primary: string; secondary: string; lat: number;
 
 // Place suggestions come from OpenStreetMap (Nominatim), which needs no key.
 // Browser Google Places is no longer authorised for this app's map key.
-async function searchPlaces(q: string, bias?: { lat: number; lng: number } | null): Promise<Suggestion[]> {
-  const params = new URLSearchParams({ q, format: "jsonv2", addressdetails: "1", limit: "8", countrycodes: "in" });
+async function searchPlaces(
+  q: string,
+  bias?: { lat: number; lng: number } | null,
+): Promise<Suggestion[]> {
+  const params = new URLSearchParams({
+    q,
+    format: "jsonv2",
+    addressdetails: "1",
+    limit: "8",
+    countrycodes: "in",
+  });
   if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
     const d = 0.5;
     params.set("viewbox", `${bias.lng - d},${bias.lat + d},${bias.lng + d},${bias.lat - d}`);
@@ -25,16 +34,20 @@ async function searchPlaces(q: string, bias?: { lat: number; lng: number } | nul
   });
   if (!res.ok) throw new Error(`Search failed [${res.status}]`);
   const rows: any[] = await res.json();
-  return rows.map((r) => {
-    const parts = String(r.display_name ?? "").split(",").map((s) => s.trim());
-    return {
-      id: String(r.place_id),
-      primary: r.name || parts[0] || "",
-      secondary: parts.slice(r.name ? 1 : 1).join(", "),
-      lat: Number(r.lat),
-      lng: Number(r.lon),
-    };
-  }).filter((s) => s.primary && Number.isFinite(s.lat) && Number.isFinite(s.lng));
+  return rows
+    .map((r) => {
+      const parts = String(r.display_name ?? "")
+        .split(",")
+        .map((s) => s.trim());
+      return {
+        id: String(r.place_id),
+        primary: r.name || parts[0] || "",
+        secondary: parts.slice(r.name ? 1 : 1).join(", "),
+        lat: Number(r.lat),
+        lng: Number(r.lon),
+      };
+    })
+    .filter((s) => s.primary && Number.isFinite(s.lat) && Number.isFinite(s.lng));
 }
 
 export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Props) {
@@ -60,7 +73,10 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
         setEmpty(list.length === 0);
       } catch (e) {
         console.warn("place search failed", e);
-        if (myReq === reqIdRef.current) { setSuggestions([]); setEmpty(true); }
+        if (myReq === reqIdRef.current) {
+          setSuggestions([]);
+          setEmpty(true);
+        }
       } finally {
         if (myReq === reqIdRef.current) setLoading(false);
       }
@@ -81,10 +97,15 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       <div className="relative">
         <div className="absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-accent" />
         <input
+          aria-label={placeholder ?? "Search destination"}
+          autoComplete="off"
           value={value}
-          onChange={(e) => { setPicked(null); onChange(e.target.value); }}
+          onChange={(e) => {
+            setPicked(null);
+            onChange(e.target.value);
+          }}
           placeholder={placeholder ?? "Search destination"}
-          className="h-16 w-full rounded-2xl bg-muted pl-10 pr-4 text-lg font-semibold outline-none placeholder:text-muted-foreground"
+          className="h-14 w-full min-w-0 rounded-xl border border-border bg-muted/50 pl-10 pr-4 text-base font-medium outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         {loading && (
           <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase text-muted-foreground">
@@ -108,7 +129,9 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
         </div>
       )}
       {empty && !loading && (
-        <p className="mt-2 px-2 text-xs text-muted-foreground">No places found. Try a nearby landmark or area name.</p>
+        <p className="mt-2 px-2 text-xs text-muted-foreground">
+          No places found. Try a nearby landmark or area name.
+        </p>
       )}
     </div>
   );

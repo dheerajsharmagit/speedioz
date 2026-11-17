@@ -2,6 +2,12 @@
 
 React 19 and TypeScript application using TanStack Start, Vite, Tailwind, shadcn UI, Leaflet/Google Maps, and Socket.IO. The production API is `https://api.rideher.in/api/v1`; its implementation is maintained separately.
 
+The customer booking screen groups locations, ride selection, payment and search
+into separate steps. Full addresses live in expandable trip details after location
+selection; the map remains visible without repeating the booking summary over it.
+Wallet top-ups, destination collection, live tracking and pickup OTP use their
+existing backend flows. Bottom navigation stays in document flow after the page.
+
 ## Local development
 
 Use Node 24 (minimum 22.12). Install with `npm ci --legacy-peer-deps`, then run `npm run dev`. The legacy peer resolver is required by the current dependency tree. npm is the verified package manager; the older bun lockfile is not used by CI.

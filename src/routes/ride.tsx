@@ -12,7 +12,7 @@ import { authApi } from "@/lib/api";
 import { RideSafety } from "@/components/rc/RideSafety";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { RideMap } from "@/components/rc/RideMap";
-import { NearbyCaptains, VehicleSymbol } from "@/components/rc/NearbyCaptains";
+import { NearbyCaptains } from "@/components/rc/NearbyCaptains";
 import { LiveTrackingStatus } from "@/components/rc/LiveTrackingStatus";
 import { mergeTrackingFix, trackingPhase, trackingIsFresh, trackingTarget, type TrackingFix } from "@/lib/live-tracking";
 import { useTrackingRoute } from "@/lib/use-tracking-route";
@@ -24,13 +24,12 @@ import {
   normalizeNearbyAvailability,
   type MapVehicleType,
 } from "@/lib/nearby-captains";
-import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
-import { PaymentMethods } from "@/components/rc/PaymentMethods";
-import { WalletFunding, walletQueryKey } from "@/components/rc/WalletFunding";
+import type { PlaceResult } from "@/components/rc/PlaceSearch";
+import { DestinationStep, VehicleStep, ConfirmStep, SearchingStep } from "@/components/rc/BookingSteps";
+import { walletQueryKey } from "@/components/rc/WalletFunding";
 import { PickupOtp, shouldShowPickupOtp } from "@/components/rc/PickupOtp";
 import { RideRating } from "@/components/rc/RideRating";
 import { RideCompletion } from "@/components/rc/RideCompletion";
-import { LegalConsent } from "@/components/legal/LegalPage";
 import {
   RequestError,
   API_BASE_URL,
@@ -1148,21 +1147,9 @@ function RidePage() {
   return (
     <div className="flex min-h-dvh min-w-0 flex-col bg-background text-foreground">
       <div className="mx-auto flex w-full min-w-0 max-w-[430px] flex-1 flex-col border-x border-border bg-background shadow-2xl">
-        <div className="flex items-center justify-between px-6 pt-8 pb-4">
-          <div className="hidden">
-            '''Do not make any visual modifications. The phrases I write are commands to understand
-            what I want, not to be written down. Understand their content well, then execute what is
-            required.''' Implement the customer booking flow in the existing codebase. Do not add
-            text/documentation or mock UI. API integration: POST /api/v1/rides/request — create ride
-            request with pickup/drop coordinates, addresses, vehicle type and payment method. GET
-            /api/v1/rides/:id/booking-details — fetch booking details. Customer UI: Show pickup and
-            drop locations. Show assigned captain profile, phone and vehicle details. Show fare and
-            distance. Show captain's live location on the map. Show booking/confirmation status.
-            Update the screen using real API data. Handle loading, errors, authentication and
-            booking status changes. Use the existing project components and API architecture.
-            Actually modify and connect the code; do not create placeholder/mock functionality.
-          </div>
-          {step === "destination" || postRide ? (
+        <div className="flex min-h-16 items-center justify-between gap-3 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
+
+          {step !== "vehicle" && step !== "confirm" ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
             </Link>
@@ -1171,10 +1158,8 @@ function RidePage() {
               onClick={() => {
                 if (step === "vehicle") setStep("destination");
                 else if (step === "confirm") setStep("vehicle");
-                else if (step === "searching") cancelSearch();
               }}
-              disabled={step !== "vehicle" && step !== "confirm" && step !== "searching"}
-              className="grid h-9 w-9 place-items-center rounded-full border border-border text-sm disabled:opacity-40"
+              className="grid h-11 w-11 place-items-center rounded-full border border-border text-sm disabled:opacity-40"
               aria-label="Back"
             >
               ←
@@ -1184,7 +1169,7 @@ function RidePage() {
         </div>
 
         {/* Map area */}
-        {!postRide && <div className="relative min-h-[360px] flex-1 overflow-hidden">
+        {!postRide && <div className={`relative shrink-0 overflow-hidden ${step === "destination" ? "h-[34dvh] min-h-[230px] max-h-[360px]" : step === "vehicle" || step === "confirm" ? "h-[30dvh] min-h-[200px] max-h-[320px]" : "h-[42dvh] min-h-[280px] max-h-[430px]"}`}>
           <RideMap
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
@@ -1230,7 +1215,7 @@ function RidePage() {
               }
             }}
             aria-label={trackingCaptain ? "Recenter map on captain" : "Recenter map on my location"}
-            className="absolute right-4 top-24 grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
+            className="absolute right-4 bottom-10 z-[1001] grid h-11 w-11 place-items-center rounded-full bg-card text-secondary shadow-lg ring-1 ring-black/10 transition hover:scale-105 active:scale-95"
           >
             <svg
               viewBox="0 0 24 24"
@@ -1248,7 +1233,7 @@ function RidePage() {
 
           {/* Geolocation error banner — compact, top-anchored so it doesn't cover the map */}
           {geoError && (
-            <div className="absolute inset-x-4 top-4 flex items-center gap-2 rounded-full bg-secondary/95 px-3 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
+            <div className="absolute inset-x-4 bottom-24 z-[1001] flex items-center gap-2 rounded-2xl bg-secondary/95 px-3 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
               <span className="text-xs font-semibold truncate">
                 {geoError === "denied"
                   ? "Location off — set pickup manually"
@@ -1272,8 +1257,8 @@ function RidePage() {
             </div>
           )}
 
-          <div className="pointer-events-none absolute left-6 right-6 top-6">
-            {showTurnByTurn && currentStep ? (
+          <div className="pointer-events-none absolute inset-x-4 top-28">
+            {showTurnByTurn && currentStep && (
               <div className="rounded-2xl bg-secondary/95 p-4 text-secondary-foreground shadow-lg ring-1 ring-black/10 backdrop-blur">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-lg font-black text-secondary">
@@ -1300,41 +1285,11 @@ function RidePage() {
                   />
                 </div>
               </div>
-            ) : (
-              <div className="rounded-2xl bg-card/95 p-4 shadow-sm ring-1 ring-black/5 backdrop-blur">
-                <p className="font-mono text-[10px] uppercase text-muted-foreground">Pickup from</p>
-                <p className="mt-1 text-xs font-semibold">
-                  {locating ? "Locating you…" : pickup.label}
-                </p>
-                {dest && (
-                  <>
-                    <div className="my-2 h-px bg-border" />
-                    <p className="font-mono text-[10px] uppercase text-muted-foreground">Drop</p>
-                    <p className="mt-1 text-xs font-semibold">{dest.addr}</p>
-                  </>
-                )}
-                {dest && routeInfo && routeInfo.distanceMeters > 0 && (
-                  <>
-                    <div className="my-2 h-px bg-border" />
-                    <div className="flex items-center gap-3 text-[11px] font-semibold">
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-                        {formatMeters(routeInfo.distanceMeters)}
-                      </span>
-                      <span className="rounded-full bg-secondary/10 px-2 py-0.5">
-                        ~{formatDuration(routeInfo.durationSeconds)}
-                      </span>
-                      <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                        via {selected === "auto" ? "roads" : "fastest"}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
             )}
           </div>
 
           {etaLabel && etaMinutes !== null && (
-            <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-center">
+            <div className="pointer-events-none absolute inset-x-16 bottom-10 flex justify-center">
               <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-secondary-foreground shadow-lg ring-1 ring-black/5">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
                 <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">
@@ -1351,72 +1306,8 @@ function RidePage() {
           )}
         </div>}
 
-        {/* '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
-                                        
-                                            
-                                            use this as google maps api key @secret:GOOGLE_API_KEY
-                                            
-                                            use the google maps with the api key for maps and routes price calculation and booking */}
-
-        {/* Bottom sheet */}
-        <div style={{ display: "none" }} aria-hidden="true">
-          '''Do not make any visual modifications. The phrases I write are commands to understand
-          what I want, not to be written down. Understand their content well, then execute what is
-          required.''' Fix the Google Places locationBias error in the RideHer frontend without
-          changing any existing UI, booking flow, backend APIs, authentication, or ride logic. The
-          browser console currently shows: Google Places unavailable, falling back to OSM
-          InvalidValueError: in property locationBias: Invalid LocationBias:
-          {"{"}
-          "center": {"{"}
-          "lat": 28.635097469507716, "lng": 77.4041429713446
-          {"}"}, "radius": 30000
-          {"}"}
-          Required fix Find the Google Places Autocomplete/location-search implementation in the
-          frontend that creates the invalid locationBias object. The current implementation is
-          using: locationBias: {"{"}
-          center: {"{"}
-          lat: currentLat, lng: currentLng
-          {"}"}, radius: 30000
-          {"}"}
-          Replace it with the correct Google Places structure: locationBias: {"{"}
-          circle: {"{"}
-          center: {"{"}
-          latitude: currentLat, longitude: currentLng
-          {"}"}, radius: 30000
-          {"}"}
-          {"}"}
-          Dynamic location Do not use hard-coded coordinates. The currentLat and currentLng values
-          must come from the user's current GPS location. Validate them before creating
-          locationBias: Number.isFinite(currentLat) && Number.isFinite(currentLng) If the user's
-          location is not available or the coordinates are invalid, do not send locationBias at all.
-          The Places search should continue without a location bias. Important requirements Keep
-          Google Places as the primary location search provider. Do not replace Google Places with
-          OSM. Do not remove the existing Google Maps integration. Do not modify the Google API key.
-          Do not change the existing RideHer UI or design. Do not change pickup/drop location
-          fields. Do not change the ride request API. Do not change /api/v1/rides/request. Do not
-          change customer/captain booking logic. Keep current-location detection working. Search the
-          entire frontend codebase for the old locationBias format and fix the relevant Google
-          Places implementation. Make sure the implementation matches the Google Places API/library
-          currently installed in this project rather than introducing a different Places API
-          implementation. Do not blindly change unrelated map configuration. Preserve the existing
-          fallback behavior only for genuine Google Places loading/API failures. Also check for this
-          Inspect the existing Google Places initialization and confirm that the API libraries
-          required for the autocomplete functionality are correctly loaded. Do not add duplicate
-          Google Maps script loading if one already exists. Expected behavior After the fix: User
-          opens Ride page ↓ Browser gets current GPS location ↓ Google Places Autocomplete loads ↓
-          locationBias uses: circle.center.latitude circle.center.longitude circle.radius ↓ User
-          searches pickup/drop location ↓ Google Places suggestions appear ↓ No InvalidValueError
-          Verification After implementing the fix: Run the frontend build. Confirm there are no
-          TypeScript/JavaScript errors. Search the compiled/source code to ensure the old invalid
-          structure is no longer being used. Test the /ride page. Test pickup location search. Test
-          drop location search. Test with GPS permission enabled. Test when GPS permission is
-          denied. Confirm the console no longer shows: InvalidValueError: Invalid LocationBias Make
-          only the changes necessary to fix this Google Places error. Do not redesign or refactor
-          unrelated parts of the application.
-        </div>
-
         <section className={postRide ? "relative py-3" : "animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5"}>
-          {!postRide && <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />}
+          {!postRide && <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />}
 
           {step === "destination" && (
             <DestinationStep
@@ -1477,6 +1368,7 @@ function RidePage() {
           {step === "vehicle" && (
             <VehicleStep
               selected={selected}
+              trip={{ pickup: pickup.label, drop: dest?.addr ?? "", routeInfo }}
               setSelected={setSelected}
               useSmartRoute={useSmartRoute}
               setUseSmartRoute={setUseSmartRoute}
@@ -1534,7 +1426,7 @@ function RidePage() {
           {ride && shouldShowPickupOtp(step) && <PickupOtp otp={ride.otp} />}
 
           {step === "searching" && (
-            <SearchingStep onCancel={cancelSearch} redispatching={redispatching} />
+            <SearchingStep onCancel={cancelSearch} redispatching={redispatching} ride={ride} />
           )}
 
           {step === "matched" && ride && (
@@ -1613,461 +1505,22 @@ function RidePage() {
 /* ---------- Step indicator ---------- */
 function StepIndicator({ step }: { step: UiStep }) {
   const map: Record<UiStep, string> = {
-    destination: "01 · Where to",
-    vehicle: "02 · Vehicle",
-    confirm: "03 · Confirm",
-    payment: "03 · Payment",
-    searching: "04 · Matching",
-    matched: "05 · Matched",
-    arriving: "06 · Pickup",
-    inprogress: "07 · En route",
-    completed: "08 · Arrived",
-    cancelled: "08 · Cancelled",
-    rating: "09 · Rate",
+    destination: "Plan your ride",
+    vehicle: "Choose a ride",
+    confirm: "Review & pay",
+    payment: "Payment",
+    searching: "Finding a captain",
+    matched: "Captain on the way",
+    arriving: "At pickup",
+    inprogress: "On your way",
+    completed: "Arrived",
+    cancelled: "Cancelled",
+    rating: "Rate your ride",
   };
   return (
-    <span className="rounded-full border border-border bg-card px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider">
+    <span className="rounded-full bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
       {map[step]}
     </span>
-  );
-}
-
-/* ---------- Destination ---------- */
-function DestinationStep({
-  pickup,
-  setPickup,
-  pickupQuery,
-  setPickupQuery,
-  onUseCurrentLocation,
-  locating,
-  pickupConfirmed,
-  dest,
-  setDest,
-  query,
-  setQuery,
-  onNext,
-  routeInfo,
-}: {
-  pickup: Pickup;
-  setPickup: (p: Pickup) => void;
-  pickupQuery: string;
-  setPickupQuery: (v: string) => void;
-  onUseCurrentLocation: () => void;
-  locating: boolean;
-  pickupConfirmed: boolean;
-  dest: PlaceResult | null;
-  setDest: (v: PlaceResult | null) => void;
-  query: string;
-  setQuery: (v: string) => void;
-  onNext: () => void;
-  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
-}) {
-  const [editPickup, setEditPickup] = useState(false);
-  return (
-    <>
-      <div className="mb-3 px-6">
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Pickup
-          </p>
-          <button
-            onClick={() => setEditPickup((v) => !v)}
-            className="font-mono text-[10px] font-bold uppercase tracking-widest text-accent hover:underline"
-          >
-            {editPickup ? "Cancel" : "Change"}
-          </button>
-        </div>
-        {!editPickup ? (
-          <div className="mt-1 flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
-            <span className="h-2 w-2 rounded-full bg-primary" />
-            <span className="flex-1 truncate text-sm font-semibold">
-              {locating ? "Locating you…" : pickup.label}
-            </span>
-          </div>
-        ) : (
-          <div className="mt-1 space-y-2">
-            <PlaceSearch
-              value={pickupQuery}
-              onChange={setPickupQuery}
-              onSelect={(p) => {
-                setPickup({ label: p.addr, lat: p.lat, lng: p.lng });
-                setPickupQuery(p.addr);
-                setEditPickup(false);
-              }}
-              placeholder="Search pickup location"
-              bias={{ lat: pickup.lat, lng: pickup.lng }}
-            />
-            <button
-              onClick={() => {
-                onUseCurrentLocation();
-                setEditPickup(false);
-              }}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background text-xs font-bold"
-            >
-              <span className="h-2 w-2 rounded-full bg-primary" /> Use current location
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-6 px-6">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Drop
-        </p>
-        <PlaceSearch
-          value={query}
-          onChange={(v) => {
-            setQuery(v);
-            if (dest && v !== dest.addr) setDest(null);
-          }}
-          onSelect={(p) => {
-            setDest(p);
-            setQuery(p.addr);
-          }}
-          placeholder="Search a destination"
-          bias={{ lat: pickup.lat, lng: pickup.lng }}
-        />
-      </div>
-
-      {dest && routeInfo && routeInfo.distanceMeters > 0 && (
-        <div className="mb-4 px-6">
-          <div className="flex items-stretch gap-2 rounded-2xl border border-border bg-muted/40 p-3">
-            <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                Distance
-              </p>
-              <p className="mt-1 text-base font-extrabold">
-                {formatMeters(routeInfo.distanceMeters)}
-              </p>
-            </div>
-            <div className="w-px bg-border" />
-            <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                Est. time
-              </p>
-              <p className="mt-1 text-base font-extrabold">
-                {formatDuration(routeInfo.durationSeconds)}
-              </p>
-            </div>
-            <div className="w-px bg-border" />
-            <div className="flex-1 text-center">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                Route
-              </p>
-              <p className="mt-1 text-[11px] font-bold">Fastest path</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="px-6 pb-6">
-        <button
-          disabled={!dest || !pickupConfirmed}
-          onClick={onNext}
-          className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {pickupConfirmed ? "Continue" : "Confirm pickup location"}
-        </button>
-      </div>
-    </>
-  );
-}
-
-/* ---------- Vehicle ---------- */
-function VehicleStep({
-  selected,
-  setSelected,
-  useSmartRoute,
-  setUseSmartRoute,
-  quotes,
-  availability,
-  nearbyCounts,
-  nearbyLoading,
-  onNext,
-}: {
-  selected: string;
-  setSelected: (v: string) => void;
-  useSmartRoute: boolean;
-  setUseSmartRoute: (v: boolean) => void;
-  quotes: Partial<Record<"bike" | "auto" | "ev" | "cab", number>>;
-  availability: Partial<Record<VehicleTypeId, boolean>>;
-  nearbyCounts: Record<MapVehicleType, number> | null;
-  nearbyLoading: boolean;
-  onNext: () => void;
-}) {
-  return (
-    <>
-      <div className="mb-4 px-6">
-        <h2 className="text-2xl font-extrabold tracking-tight">Pick your ride</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Fares are estimated by the booking service.
-        </p>
-      </div>
-
-      <div
-        className="mx-6 mb-6 overflow-hidden rounded-2xl border border-border"
-        aria-label="Vehicle options"
-      >
-        {vehicles.map((v) => {
-          const active = v.id === selected;
-          // EV bikes book as BIKE on the backend, so availability follows BIKE.
-          const availabilityKey: VehicleTypeId =
-            v.id === "auto" ? "AUTO" : v.id === "cab" ? "CAB" : "BIKE";
-          const unavailable =
-            availability[availabilityKey] === false || quotes[v.id as keyof typeof quotes] == null;
-          return (
-            <button
-              key={v.id}
-              onClick={() => {
-                if (!unavailable) setSelected(v.id);
-              }}
-              disabled={unavailable}
-              aria-disabled={unavailable}
-              aria-pressed={active}
-              className={`flex min-h-20 w-full items-center gap-3 border-b border-border/60 px-4 py-3 text-left transition last:border-b-0 ${
-                unavailable
-                  ? "cursor-not-allowed bg-muted opacity-60"
-                  : active
-                    ? "bg-primary/15"
-                    : "bg-card hover:bg-muted/60"
-              }`}
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-secondary">
-                <VehicleSymbol type={availabilityKey} className="h-6 w-6" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold">{v.name}</span>
-                <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {unavailable
-                    ? "Not available in this area"
-                    : nearbyCounts
-                      ? `${nearbyCounts[availabilityKey]} captain${nearbyCounts[availabilityKey] === 1 ? "" : "s"} nearby`
-                      : nearbyLoading
-                        ? "Checking nearby availability…"
-                        : "Nearby count unavailable"}
-                </span>
-              </span>
-              <span className="text-lg font-bold">
-                {unavailable ? "—" : `₹${quotes[v.id as keyof typeof quotes]}`}
-              </span>
-              <span
-                aria-hidden="true"
-                className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${active ? "border-secondary bg-primary" : "border-muted-foreground/40"}`}
-              >
-                {active && <span className="h-1.5 w-1.5 rounded-full bg-secondary" />}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mb-6 rounded-2xl bg-muted mx-6 p-4 text-sm">
-        Community route selection is unavailable for booking. Your ride uses the standard road
-        route.
-      </div>
-
-      <div className="px-6 pb-6">
-        <button
-          onClick={onNext}
-          disabled={quotes[selected as keyof typeof quotes] == null}
-          className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-50"
-        >
-          Review ride
-        </button>
-      </div>
-    </>
-  );
-}
-
-/* ---------- Confirm ---------- */
-function ConfirmStep({
-  vehicle,
-  fare,
-  useSmartRoute,
-  smartSavings,
-  payment,
-  setPayment,
-  onNext,
-  busy,
-  routeInfo,
-  pickupLabel,
-  dropLabel,
-  gateway,
-  gatewayChecking,
-  gatewayFailed,
-  onRetryGateway,
-  walletBalance,
-}: {
-  vehicle: Vehicle;
-  fare: number;
-  useSmartRoute: boolean;
-  smartSavings: number;
-  payment: Payment;
-  setPayment: (p: Payment) => void;
-  onNext: () => void;
-  busy: boolean;
-  routeInfo: { distanceMeters: number; durationSeconds: number } | null;
-  pickupLabel: string;
-  dropLabel: string;
-  gateway: PaymentConfiguration | null;
-  gatewayChecking: boolean;
-  gatewayFailed: boolean;
-  onRetryGateway: () => void;
-  walletBalance: number | null;
-}) {
-  return (
-    <>
-      <div className="mb-4 px-6">
-        <h2 className="text-2xl font-extrabold tracking-tight">Confirm ride</h2>
-      </div>
-
-      <div className="mb-4 px-6">
-        <div className="rounded-2xl border border-border p-4">
-          <div className="space-y-2">
-            <div className="flex items-start gap-2">
-              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
-              <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase text-muted-foreground">Pickup</p>
-                <p className="truncate text-xs font-semibold">{pickupLabel}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-              <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase text-muted-foreground">Drop</p>
-                <p className="truncate text-xs font-semibold">{dropLabel}</p>
-              </div>
-            </div>
-          </div>
-          {routeInfo && routeInfo.distanceMeters > 0 && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-[11px] font-semibold">
-              <span>{formatMeters(routeInfo.distanceMeters)}</span>
-              <span className="text-muted-foreground">·</span>
-              <span>~{formatDuration(routeInfo.durationSeconds)}</span>
-              <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                Fastest route
-              </span>
-            </div>
-          )}
-          <div className="my-3 h-px bg-border" />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">Vehicle</p>
-              <p className="mt-1 text-base font-bold">{vehicle.name}</p>
-            </div>
-            <div className="text-right">
-              <p className="font-mono text-[10px] uppercase text-muted-foreground">ETA</p>
-              <p className="mt-1 text-base font-bold">{vehicle.eta}</p>
-            </div>
-          </div>
-          <div className="my-3 h-px bg-border" />
-          <div className="space-y-1 text-xs">
-            <Row label="Route-based fare estimate" value={`₹${fare}`} />
-            <Row
-              label="Smart Route"
-              value={useSmartRoute ? `−${smartSavings} min saved` : "—"}
-              accent={useSmartRoute}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-            <p className="text-sm font-bold">Total</p>
-            <p className="text-xl font-extrabold">₹{fare}</p>
-          </div>
-        </div>
-      </div>
-
-      <PaymentMethods
-        payment={payment}
-        onChange={setPayment}
-        configuration={gateway}
-        checking={gatewayChecking}
-        failed={gatewayFailed}
-        onRetry={onRetryGateway}
-        walletBalance={walletBalance}
-      />
-      {payment === "wallet" && (
-        <div className="mx-6 mb-5">
-          <WalletFunding requiredFare={fare} />
-        </div>
-      )}
-
-      <div className="px-6 pb-6">
-        <button
-          onClick={onNext}
-          disabled={busy || !isPaymentMethodAvailable(payment, gateway, walletBalance, fare)}
-          className="h-16 w-full rounded-full bg-primary text-lg font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-60"
-        >
-          {busy
-            ? "Requesting…"
-            : payment === "wallet"
-              ? `Book with wallet · ₹${fare}`
-              : `Pay at the end · ₹${fare}`}
-        </button>
-        <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            OTP shared with captain on pickup
-        </p>
-          <div className="mt-4"><LegalConsent action="booking a ride" /></div>
-      </div>
-    </>
-  );
-}
-
-function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={accent ? "font-bold text-accent" : "font-semibold"}>{value}</span>
-    </div>
-  );
-}
-
-/* ---------- Searching ---------- */
-function SearchingStep({
-  onCancel,
-  redispatching,
-}: {
-  onCancel: () => void;
-  redispatching?: boolean;
-}) {
-  return (
-    <>
-      <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          Matching
-        </p>
-        <div
-          className="mx-auto mt-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
-          aria-hidden
-        />
-        <h2 className="mt-4 text-2xl font-extrabold tracking-tight">
-          {redispatching ? "Finding another captain…" : "Searching…"}
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {redispatching
-            ? "Your captain went offline. We're matching you with someone nearby."
-            : "Pinging nearby women captains…"}
-        </p>
-      </div>
-      <div className="mb-6 px-6">
-        <div className="rounded-2xl bg-muted p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-            <p className="text-xs font-semibold">Broadcasting to nearby captains</p>
-          </div>
-          <p className="mt-2 text-[10px] font-mono uppercase text-muted-foreground">
-            We will update this screen when a captain accepts your ride.
-          </p>
-        </div>
-      </div>
-      <div className="px-6 pb-6">
-        <button
-          onClick={onCancel}
-          className="h-14 w-full rounded-full border border-border bg-background text-sm font-bold transition-transform active:scale-95"
-        >
-          Cancel search
-        </button>
-      </div>
-    </>
   );
 }
 

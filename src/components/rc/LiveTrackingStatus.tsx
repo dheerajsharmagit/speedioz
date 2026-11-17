@@ -15,7 +15,7 @@ export function LiveTrackingStatus({
   const fresh = trackingIsFresh(fix, now);
   const age = fix?.at ? Math.max(0, Math.floor((now - Date.parse(fix.at)) / 1000)) : null;
   return (
-    <div className="absolute left-4 top-24 z-[1000] max-w-[calc(100%-5.5rem)] rounded-2xl border border-border/60 bg-card/95 px-3 py-2.5 text-foreground shadow-lg backdrop-blur">
+    <div className="absolute left-4 top-4 z-[1000] max-w-[calc(100%-2rem)] rounded-2xl border border-border/60 bg-card/95 px-3 py-2.5 text-foreground shadow-sm backdrop-blur">
       <p className="text-xs font-bold">
         {phase === "pickup" ? "Captain approaching pickup" : "Live trip to your destination"}
       </p>
