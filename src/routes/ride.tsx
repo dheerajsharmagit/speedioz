@@ -27,8 +27,10 @@ import {
 import { PlaceSearch, type PlaceResult } from "@/components/rc/PlaceSearch";
 import { PaymentMethods } from "@/components/rc/PaymentMethods";
 import { WalletFunding, walletQueryKey } from "@/components/rc/WalletFunding";
-import { CustomerCollection } from "@/components/rc/CustomerCollection";
 import { PickupOtp, shouldShowPickupOtp } from "@/components/rc/PickupOtp";
+import { RideRating } from "@/components/rc/RideRating";
+import { RideCompletion } from "@/components/rc/RideCompletion";
+import { LegalConsent } from "@/components/legal/LegalPage";
 import {
   RequestError,
   API_BASE_URL,
@@ -299,6 +301,9 @@ function toClientRide(source: CanonicalRide | BookingDetails): Ride {
     paymentMethod: details.paymentMethod ?? ride.paymentMethod,
     paymentStatus: details.paymentStatus ?? ride.paymentStatus,
     fareBreakdown: details.fareBreakdown,
+    rating: details.rating,
+    distanceMeters: details.distanceMeters ?? ride.distanceMeters,
+    durationSeconds: details.durationSeconds ?? ride.durationSeconds,
     captain_name: details.captain?.name,
     captain_phone: details.captain?.phone ?? undefined,
     captain_vehicle: details.captain?.vehicleModel ?? details.captain?.vehicleType ?? undefined,
@@ -431,8 +436,6 @@ function RidePage() {
   const [captainPos, setCaptainPos] = useState<TrackingFix | null>(null);
   const [trackingNow, setTrackingNow] = useState(Date.now);
   const [trackingConnected, setTrackingConnected] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [tip, setTip] = useState(0);
   const [creating, setCreating] = useState(false);
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
@@ -453,7 +456,6 @@ function RidePage() {
   >({});
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
   const [redispatching, setRedispatching] = useState(false);
-  const [rateComment, setRateComment] = useState("");
   const awaitingPaymentRef = useRef(false);
   const paymentPickedRef = useRef(false);
   const idemKeyRef = useRef<string | null>(null);
@@ -1052,28 +1054,13 @@ function RidePage() {
     setStep("confirm");
   }
 
-  async function submitRating() {
-    if (!ride) return;
-    try {
-      await rideApi.rate(ride.id, {
-        stars: rating,
-        tip: tip || undefined,
-        comment: rateComment.trim() || undefined,
-      });
-    } catch (e) {
-      alert("Your rating could not be saved. Please try again.");
-      return;
-    }
-    setRateComment("");
-    // reset
+  function finishRating() {
     setRide(null);
     setDest(null);
     setDestQuery("");
     setEncodedPolyline("");
     setRouteSteps([]);
     setCaptainPos(null);
-    setRating(0);
-    setTip(0);
     setSelected("bike");
     setStep("destination");
   }
@@ -1140,6 +1127,11 @@ function RidePage() {
     return null;
   })();
 
+  const postRide = ["completed", "rating", "cancelled"].includes(step);
+  useEffect(() => {
+    if (postRide) window.scrollTo({ top: 0, behavior: "instant" });
+  }, [step, postRide]);
+
   if (recovering || bookingError)
     return (
       <div className="flex min-h-screen flex-col bg-background p-8 text-center">
@@ -1154,8 +1146,8 @@ function RidePage() {
     );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex min-h-screen max-w-[430px] flex-col border-x border-border bg-background shadow-2xl">
+    <div className="flex min-h-dvh min-w-0 flex-col bg-background text-foreground">
+      <div className="mx-auto flex w-full min-w-0 max-w-[430px] flex-1 flex-col border-x border-border bg-background shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div className="hidden">
             '''Do not make any visual modifications. The phrases I write are commands to understand
@@ -1170,7 +1162,7 @@ function RidePage() {
             booking status changes. Use the existing project components and API architecture.
             Actually modify and connect the code; do not create placeholder/mock functionality.
           </div>
-          {step === "destination" ? (
+          {step === "destination" || postRide ? (
             <Link to="/" className="text-lg font-extrabold uppercase tracking-tighter">
               RIDE<span className="text-primary">HER</span>
             </Link>
@@ -1192,7 +1184,7 @@ function RidePage() {
         </div>
 
         {/* Map area */}
-        <div className="relative min-h-[360px] flex-1 overflow-hidden">
+        {!postRide && <div className="relative min-h-[360px] flex-1 overflow-hidden">
           <RideMap
             pickup={mapPickup}
             drop={dest ? mapDrop : mapPickup}
@@ -1357,7 +1349,7 @@ function RidePage() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* '''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''
                                         
@@ -1423,8 +1415,8 @@ function RidePage() {
           unrelated parts of the application.
         </div>
 
-        <section className="animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
-          <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />
+        <section className={postRide ? "relative py-3" : "animate-sheet-up relative -mt-8 rounded-t-[32px] bg-card pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/5"}>
+          {!postRide && <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-muted" />}
 
           {step === "destination" && (
             <DestinationStep
@@ -1582,7 +1574,7 @@ function RidePage() {
           )}
 
           {step === "completed" && ride && (
-            <CompletedStep fare={ride.fare_inr} onNext={() => setStep("rating")} ride={ride} />
+            <RideCompletion onRate={() => setStep("rating")} ride={ride} />
           )}
 
           {step === "cancelled" && (
@@ -1602,16 +1594,14 @@ function RidePage() {
           )}
 
           {step === "rating" && ride && (
-            <RatingStep
+            <div className="px-4 pb-5"><RideRating
+              key={ride.id}
+              rideId={ride.id}
               captainName={ride.captain_name ?? "your captain"}
-              rating={rating}
-              setRating={setRating}
-              tip={tip}
-              setTip={setTip}
-              comment={rateComment}
-              setComment={setRateComment}
-              onDone={submitRating}
-            />
+              initialRating={ride.rating}
+              onSaved={rating => setRide(current => current?.id === ride.id ? { ...current, rating } : current)}
+              onDone={finishRating}
+            /></div>
           )}
         </section>
       </div>
@@ -2014,8 +2004,9 @@ function ConfirmStep({
               : `Pay at the end · ₹${fare}`}
         </button>
         <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          OTP shared with captain on pickup
+            OTP shared with captain on pickup
         </p>
+          <div className="mt-4"><LegalConsent action="booking a ride" /></div>
       </div>
     </>
   );
@@ -2208,183 +2199,6 @@ function RideStatusStep({
 // Mock simulation removed as backend is now the authority.
 function useCaptainDriving(ride: Ride) {
   useEffect(() => {}, [ride.id]);
-}
-
-/* ---------- Completed ---------- */
-function CompletedStep({ fare, onNext, ride }: { fare: number; onNext: () => void; ride: Ride }) {
-  return (
-    <>
-      <div className="mb-4 px-6">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-accent">Arrived</p>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">You&apos;ve reached</h2>
-      </div>
-
-      <div className="mb-6 px-6">
-        <div className="rounded-2xl border border-border p-5">
-          <div className="flex items-baseline justify-between">
-            <p className="text-sm font-bold">Total fare</p>
-            <p className="text-3xl font-extrabold">₹{fare}</p>
-          </div>
-          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Ride fare</span>
-              <span>
-                {ride.fareBreakdown
-                  ? `₹${((ride.fareBreakdown.subtotalPaise ?? 0) / 100).toFixed(2)}`
-                  : "Included in total"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Taxes & fees</span>
-              <span>
-                {ride.fareBreakdown
-                  ? `₹${((ride.fareBreakdown.gstPaise ?? 0) / 100).toFixed(2)}`
-                  : "Included in total"}
-              </span>
-            </div>
-          </div>
-          <div className="my-4 h-px bg-border" />
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat
-              label="Distance"
-              value={
-                ride
-                  ? `${haversineKm({ lat: ride.pickup_lat, lng: ride.pickup_lng }, { lat: ride.drop_lat, lng: ride.drop_lng }).toFixed(1)} km`
-                  : "—"
-              }
-            />
-            <Stat
-              label="Duration"
-              value={
-                ride
-                  ? `${computeEtaMinutes({ lat: ride.pickup_lat, lng: ride.pickup_lng }, { lat: ride.drop_lat, lng: ride.drop_lng }, ride.vehicle_type)} min`
-                  : "—"
-              }
-            />
-            <Stat label="Time saved" value="Unavailable" />
-          </div>
-        </div>
-      </div>
-
-      <CustomerCollection rideId={ride.id} />
-      <div className="px-6 pb-8">
-        <button
-          onClick={onNext}
-          className="h-14 w-full rounded-full bg-primary text-base font-bold text-secondary shadow-xl transition-transform active:scale-95"
-        >
-          Rate your ride
-        </button>
-      </div>
-    </>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div>
-      <p className="font-mono text-[9px] uppercase text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-sm font-extrabold ${accent ? "text-accent" : ""}`}>{value}</p>
-    </div>
-  );
-}
-
-/* ---------- Rating ---------- */
-function RatingStep({
-  captainName,
-  rating,
-  setRating,
-  tip,
-  setTip,
-  comment,
-  setComment,
-  onDone,
-}: {
-  comment: string;
-  setComment: (s: string) => void;
-  captainName: string;
-  rating: number;
-  setRating: (n: number) => void;
-  tip: number;
-  setTip: (n: number) => void;
-  onDone: () => void;
-}) {
-  const tips = [0, 10, 20, 50];
-  return (
-    <>
-      <div className="mb-4 px-6 text-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          Feedback
-        </p>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Rate {captainName}</h2>
-      </div>
-
-      <div className="mb-6 flex justify-center gap-2 px-6">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            onClick={() => setRating(n)}
-            className={`grid h-12 w-12 place-items-center rounded-full text-2xl transition ${
-              n <= rating ? "bg-primary text-secondary" : "bg-muted text-muted-foreground"
-            }`}
-            aria-label={`${n} stars`}
-          >
-            ★
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-6 px-6">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Add a tip
-        </p>
-        <div className="grid grid-cols-4 gap-2">
-          {tips.map((t) => {
-            const active = t === tip;
-            return (
-              <button
-                key={t}
-                onClick={() => setTip(t)}
-                className={`rounded-2xl border py-3 text-sm font-bold transition ${
-                  active
-                    ? "border-foreground bg-secondary text-secondary-foreground"
-                    : "border-border bg-background"
-                }`}
-              >
-                {t === 0 ? "None" : `₹${t}`}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mb-6 px-6">
-        <label
-          className="mb-2 block font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
-          htmlFor="rate-comment"
-        >
-          Comment (optional)
-        </label>
-        <textarea
-          id="rate-comment"
-          value={comment}
-          maxLength={500}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="How was your ride?"
-          className="min-h-20 w-full rounded-2xl border border-border bg-background p-3 text-sm"
-        />
-      </div>
-
-      <div className="px-6 pb-6">
-        <button
-          onClick={onDone}
-          disabled={rating === 0}
-          className="h-14 w-full rounded-full bg-primary text-base font-bold text-secondary shadow-xl transition-transform active:scale-95 disabled:opacity-40"
-        >
-          Submit · Book another
-        </button>
-      </div>
-    </>
-  );
 }
 
 /* ---------- Online payment (UPI / Card) ---------- */

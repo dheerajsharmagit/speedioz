@@ -19,6 +19,24 @@ afterEach(() => {
   vi.resetModules();
 });
 describe("API authentication", () => {
+  it("submits the selected ride rating with the authenticated customer token", async () => {
+    browser();
+    const fetcher = vi.fn(async () => Response.json({ data: { id: "rating-1", stars: 5 } }, { status: 201 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { rideApi } = await import("./api");
+    const result = await rideApi.rate("ride-1", { stars: 5, tip: 10, comment: "Safe ride" });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/rides\/ride-1\/rate$/);
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer old");
+    expect(JSON.parse(init.body as string)).toEqual({ stars: 5, tip: 10, comment: "Safe ride" });
+    expect(result.data.stars).toBe(5);
+  });
+  it("preserves the server's rating error for an inline retry message", async () => {
+    browser();
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ code: "INVALID_RIDE_STATE", message: "You can rate this ride once it is completed" }, { status: 409 })));
+    const { rideApi } = await import("./api");
+    await expect(rideApi.rate("ride-1", { stars: 5 })).rejects.toMatchObject({ status: 409, message: "You can rate this ride once it is completed" });
+  });
   it("sends only a Google ID credential to the customer-only endpoint", async () => {
     browser();
     const fetcher = vi.fn(async () =>

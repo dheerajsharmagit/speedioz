@@ -10,22 +10,45 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutUsRouteImport } from './routes/about-us'
+import { Route as AccountDeletionRouteImport } from './routes/account-deletion'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ApiDocsRouteImport } from './routes/api-docs'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CancellationPolicyRouteImport } from './routes/cancellation-policy'
 import { Route as CaptainRouteImport } from './routes/captain'
+import { Route as CaptainAgreementRouteImport } from './routes/captain-agreement'
+import { Route as ContactUsRouteImport } from './routes/contact-us'
+import { Route as GrievanceRedressalRouteImport } from './routes/grievance-redressal'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as PoliciesRouteImport } from './routes/policies'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as RideRouteImport } from './routes/ride'
 import { Route as RoutesRouteImport } from './routes/routes'
+import { Route as SafetyGuidelinesRouteImport } from './routes/safety-guidelines'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ShippingAndDeliveryRouteImport } from './routes/shipping-and-delivery'
+import { Route as TermsAndConditionsRouteImport } from './routes/terms-and-conditions'
 import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as ApiPublicRhSplatRouteImport } from './routes/api/public/rh/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutUsRoute = AboutUsRouteImport.update({
+  id: '/about-us',
+  path: '/about-us',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountDeletionRoute = AccountDeletionRouteImport.update({
+  id: '/account-deletion',
+  path: '/account-deletion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -43,9 +66,29 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CancellationPolicyRoute = CancellationPolicyRouteImport.update({
+  id: '/cancellation-policy',
+  path: '/cancellation-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CaptainRoute = CaptainRouteImport.update({
   id: '/captain',
   path: '/captain',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CaptainAgreementRoute = CaptainAgreementRouteImport.update({
+  id: '/captain-agreement',
+  path: '/captain-agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactUsRoute = ContactUsRouteImport.update({
+  id: '/contact-us',
+  path: '/contact-us',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GrievanceRedressalRoute = GrievanceRedressalRouteImport.update({
+  id: '/grievance-redressal',
+  path: '/grievance-redressal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -58,9 +101,29 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PoliciesRoute = PoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RefundPolicyRoute = RefundPolicyRouteImport.update({
+  id: '/refund-policy',
+  path: '/refund-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RideRoute = RideRouteImport.update({
@@ -73,9 +136,24 @@ const RoutesRoute = RoutesRouteImport.update({
   path: '/routes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SafetyGuidelinesRoute = SafetyGuidelinesRouteImport.update({
+  id: '/safety-guidelines',
+  path: '/safety-guidelines',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShippingAndDeliveryRoute = ShippingAndDeliveryRouteImport.update({
+  id: '/shipping-and-delivery',
+  path: '/shipping-and-delivery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsAndConditionsRoute = TermsAndConditionsRouteImport.update({
+  id: '/terms-and-conditions',
+  path: '/terms-and-conditions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WalletRoute = WalletRouteImport.update({
@@ -91,47 +169,86 @@ const ApiPublicRhSplatRoute = ApiPublicRhSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about-us': typeof AboutUsRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
+  '/cancellation-policy': typeof CancellationPolicyRoute
   '/captain': typeof CaptainRoute
+  '/captain-agreement': typeof CaptainAgreementRoute
+  '/contact-us': typeof ContactUsRoute
+  '/grievance-redressal': typeof GrievanceRedressalRoute
   '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
+  '/policies': typeof PoliciesRoute
+  '/pricing': typeof PricingRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
+  '/safety-guidelines': typeof SafetyGuidelinesRoute
   '/settings': typeof SettingsRoute
+  '/shipping-and-delivery': typeof ShippingAndDeliveryRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/wallet': typeof WalletRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about-us': typeof AboutUsRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
+  '/cancellation-policy': typeof CancellationPolicyRoute
   '/captain': typeof CaptainRoute
+  '/captain-agreement': typeof CaptainAgreementRoute
+  '/contact-us': typeof ContactUsRoute
+  '/grievance-redressal': typeof GrievanceRedressalRoute
   '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
+  '/policies': typeof PoliciesRoute
+  '/pricing': typeof PricingRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
+  '/safety-guidelines': typeof SafetyGuidelinesRoute
   '/settings': typeof SettingsRoute
+  '/shipping-and-delivery': typeof ShippingAndDeliveryRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/wallet': typeof WalletRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about-us': typeof AboutUsRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/api-docs': typeof ApiDocsRoute
   '/auth': typeof AuthRoute
+  '/cancellation-policy': typeof CancellationPolicyRoute
   '/captain': typeof CaptainRoute
+  '/captain-agreement': typeof CaptainAgreementRoute
+  '/contact-us': typeof ContactUsRoute
+  '/grievance-redressal': typeof GrievanceRedressalRoute
   '/history': typeof HistoryRoute
   '/onboarding': typeof OnboardingRoute
+  '/policies': typeof PoliciesRoute
+  '/pricing': typeof PricingRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/ride': typeof RideRoute
   '/routes': typeof RoutesRoute
+  '/safety-guidelines': typeof SafetyGuidelinesRoute
   '/settings': typeof SettingsRoute
+  '/shipping-and-delivery': typeof ShippingAndDeliveryRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/wallet': typeof WalletRoute
   '/api/public/rh/$': typeof ApiPublicRhSplatRoute
 }
@@ -139,62 +256,114 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about-us'
+    | '/account-deletion'
     | '/admin'
     | '/api-docs'
     | '/auth'
+    | '/cancellation-policy'
     | '/captain'
+    | '/captain-agreement'
+    | '/contact-us'
+    | '/grievance-redressal'
     | '/history'
     | '/onboarding'
+    | '/policies'
+    | '/pricing'
+    | '/privacy-policy'
     | '/profile'
+    | '/refund-policy'
     | '/ride'
     | '/routes'
+    | '/safety-guidelines'
     | '/settings'
+    | '/shipping-and-delivery'
+    | '/terms-and-conditions'
     | '/wallet'
     | '/api/public/rh/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about-us'
+    | '/account-deletion'
     | '/admin'
     | '/api-docs'
     | '/auth'
+    | '/cancellation-policy'
     | '/captain'
+    | '/captain-agreement'
+    | '/contact-us'
+    | '/grievance-redressal'
     | '/history'
     | '/onboarding'
+    | '/policies'
+    | '/pricing'
+    | '/privacy-policy'
     | '/profile'
+    | '/refund-policy'
     | '/ride'
     | '/routes'
+    | '/safety-guidelines'
     | '/settings'
+    | '/shipping-and-delivery'
+    | '/terms-and-conditions'
     | '/wallet'
     | '/api/public/rh/$'
   id:
     | '__root__'
     | '/'
+    | '/about-us'
+    | '/account-deletion'
     | '/admin'
     | '/api-docs'
     | '/auth'
+    | '/cancellation-policy'
     | '/captain'
+    | '/captain-agreement'
+    | '/contact-us'
+    | '/grievance-redressal'
     | '/history'
     | '/onboarding'
+    | '/policies'
+    | '/pricing'
+    | '/privacy-policy'
     | '/profile'
+    | '/refund-policy'
     | '/ride'
     | '/routes'
+    | '/safety-guidelines'
     | '/settings'
+    | '/shipping-and-delivery'
+    | '/terms-and-conditions'
     | '/wallet'
     | '/api/public/rh/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutUsRoute: typeof AboutUsRoute
+  AccountDeletionRoute: typeof AccountDeletionRoute
   AdminRoute: typeof AdminRoute
   ApiDocsRoute: typeof ApiDocsRoute
   AuthRoute: typeof AuthRoute
+  CancellationPolicyRoute: typeof CancellationPolicyRoute
   CaptainRoute: typeof CaptainRoute
+  CaptainAgreementRoute: typeof CaptainAgreementRoute
+  ContactUsRoute: typeof ContactUsRoute
+  GrievanceRedressalRoute: typeof GrievanceRedressalRoute
   HistoryRoute: typeof HistoryRoute
   OnboardingRoute: typeof OnboardingRoute
+  PoliciesRoute: typeof PoliciesRoute
+  PricingRoute: typeof PricingRoute
+  PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   ProfileRoute: typeof ProfileRoute
+  RefundPolicyRoute: typeof RefundPolicyRoute
   RideRoute: typeof RideRoute
   RoutesRoute: typeof RoutesRoute
+  SafetyGuidelinesRoute: typeof SafetyGuidelinesRoute
   SettingsRoute: typeof SettingsRoute
+  ShippingAndDeliveryRoute: typeof ShippingAndDeliveryRoute
+  TermsAndConditionsRoute: typeof TermsAndConditionsRoute
   WalletRoute: typeof WalletRoute
   ApiPublicRhSplatRoute: typeof ApiPublicRhSplatRoute
 }
@@ -206,6 +375,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about-us': {
+      id: '/about-us'
+      path: '/about-us'
+      fullPath: '/about-us'
+      preLoaderRoute: typeof AboutUsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account-deletion': {
+      id: '/account-deletion'
+      path: '/account-deletion'
+      fullPath: '/account-deletion'
+      preLoaderRoute: typeof AccountDeletionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -229,11 +412,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cancellation-policy': {
+      id: '/cancellation-policy'
+      path: '/cancellation-policy'
+      fullPath: '/cancellation-policy'
+      preLoaderRoute: typeof CancellationPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/captain': {
       id: '/captain'
       path: '/captain'
       fullPath: '/captain'
       preLoaderRoute: typeof CaptainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/captain-agreement': {
+      id: '/captain-agreement'
+      path: '/captain-agreement'
+      fullPath: '/captain-agreement'
+      preLoaderRoute: typeof CaptainAgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact-us': {
+      id: '/contact-us'
+      path: '/contact-us'
+      fullPath: '/contact-us'
+      preLoaderRoute: typeof ContactUsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/grievance-redressal': {
+      id: '/grievance-redressal'
+      path: '/grievance-redressal'
+      fullPath: '/grievance-redressal'
+      preLoaderRoute: typeof GrievanceRedressalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -250,11 +461,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/policies': {
+      id: '/policies'
+      path: '/policies'
+      fullPath: '/policies'
+      preLoaderRoute: typeof PoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy-policy': {
+      id: '/privacy-policy'
+      path: '/privacy-policy'
+      fullPath: '/privacy-policy'
+      preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refund-policy': {
+      id: '/refund-policy'
+      path: '/refund-policy'
+      fullPath: '/refund-policy'
+      preLoaderRoute: typeof RefundPolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ride': {
@@ -271,11 +510,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoutesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/safety-guidelines': {
+      id: '/safety-guidelines'
+      path: '/safety-guidelines'
+      fullPath: '/safety-guidelines'
+      preLoaderRoute: typeof SafetyGuidelinesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shipping-and-delivery': {
+      id: '/shipping-and-delivery'
+      path: '/shipping-and-delivery'
+      fullPath: '/shipping-and-delivery'
+      preLoaderRoute: typeof ShippingAndDeliveryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms-and-conditions': {
+      id: '/terms-and-conditions'
+      path: '/terms-and-conditions'
+      fullPath: '/terms-and-conditions'
+      preLoaderRoute: typeof TermsAndConditionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/wallet': {
@@ -297,16 +557,29 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutUsRoute: AboutUsRoute,
+  AccountDeletionRoute: AccountDeletionRoute,
   AdminRoute: AdminRoute,
   ApiDocsRoute: ApiDocsRoute,
   AuthRoute: AuthRoute,
+  CancellationPolicyRoute: CancellationPolicyRoute,
   CaptainRoute: CaptainRoute,
+  CaptainAgreementRoute: CaptainAgreementRoute,
+  ContactUsRoute: ContactUsRoute,
+  GrievanceRedressalRoute: GrievanceRedressalRoute,
   HistoryRoute: HistoryRoute,
   OnboardingRoute: OnboardingRoute,
+  PoliciesRoute: PoliciesRoute,
+  PricingRoute: PricingRoute,
+  PrivacyPolicyRoute: PrivacyPolicyRoute,
   ProfileRoute: ProfileRoute,
+  RefundPolicyRoute: RefundPolicyRoute,
   RideRoute: RideRoute,
   RoutesRoute: RoutesRoute,
+  SafetyGuidelinesRoute: SafetyGuidelinesRoute,
   SettingsRoute: SettingsRoute,
+  ShippingAndDeliveryRoute: ShippingAndDeliveryRoute,
+  TermsAndConditionsRoute: TermsAndConditionsRoute,
   WalletRoute: WalletRoute,
   ApiPublicRhSplatRoute: ApiPublicRhSplatRoute,
 }

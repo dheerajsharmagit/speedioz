@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { LegalConsent } from "@/components/legal/LegalPage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { paymentApi, storage, walletApi, type WalletTopUp } from "@/lib/api";
 import { razorpayCheckoutDetails } from "@/lib/payments";
@@ -191,6 +192,7 @@ export function WalletFunding({ requiredFare = 0 }: { requiredFare?: number }) {
           </button>
         </div>
       )}
+      <LegalConsent action="adding money" />
       {message && (
         <p role="status" className="text-sm">
           {message}

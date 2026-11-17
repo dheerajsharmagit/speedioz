@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-r
 import { useEffect, useState } from "react";
 import { authApi, storage } from "@/lib/api";
 import { GoogleSignIn } from "@/components/rc/GoogleSignIn";
+import { LegalConsent } from "@/components/legal/LegalPage";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): { mode: "signin" | "signup" } => {
@@ -202,9 +203,7 @@ function AuthPage() {
           {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
         </button>
 
-        <p className="mt-auto pt-10 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          By continuing you agree to our terms.
-        </p>
+        <div className="mt-auto pt-8 text-center"><LegalConsent /></div>
       </div>
     </div>
   );

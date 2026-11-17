@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { authApi, type AuthUser } from "@/lib/api";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RoleNav } from "@/components/rc/RoleNav";
+import { PolicyLinks } from "@/components/legal/LegalPage";
 import { useTheme, type Intensity, type Mode } from "@/lib/theme";
 
 export const Route = createFileRoute("/settings")({
@@ -190,6 +191,7 @@ function SettingsPage() {
           </div>
         </section>
       </div>
+      <div className="mx-auto w-full max-w-2xl px-5 py-7"><PolicyLinks compact /></div>
       <RoleNav />
     </div>
   );

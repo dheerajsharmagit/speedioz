@@ -323,7 +323,7 @@ export const rideApi = {
     }),
   history: async () => unwrapList(await api<any>("/rides/history/me")) as RideHistoryItem[],
   rate: (id: string, data: { stars: number; tip?: number; comment?: string }) =>
-    api(`/rides/${id}/rate`, { method: "POST", body: JSON.stringify(data) }),
+    api<{ data: SavedRideRating }>(`/rides/${encodeURIComponent(id)}/rate`, { method: "POST", body: JSON.stringify(data) }),
 };
 
 export type RideEstimate = {
@@ -367,7 +367,16 @@ export type CanonicalRideStatus =
   | "ARRIVING"
   | "IN_PROGRESS"
   | "COMPLETED"
+  | "RATED"
   | "CANCELLED";
+
+export type SavedRideRating = {
+  id: string;
+  stars: number;
+  comment?: string | null;
+  tip?: number | null;
+  createdAt?: string;
+};
 
 export type RideRequest = {
   pickupLat: number;
@@ -424,6 +433,7 @@ export type RideHistoryItem = {
   distanceMeters?: number;
   durationSeconds?: number;
   createdAt?: string;
+  rating?: SavedRideRating | null;
 };
 
 /** Normalise the create-ride response across backend versions. */
@@ -515,6 +525,7 @@ export type BookingDetails = {
   paymentMethod?: "CASH" | "CARD" | "UPI" | "WALLET";
   paymentStatus?: PaymentStatus;
   fareFinal?: number | null;
+  rating?: SavedRideRating | null;
   fareBreakdown?: Record<string, number> | null;
 };
 

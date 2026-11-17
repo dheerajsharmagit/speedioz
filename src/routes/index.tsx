@@ -91,7 +91,7 @@ const safetyPromises = [
   "Ride Recording Option",
   "Night Ride Monitoring",
   "Route Deviation Alerts",
-  "24×7 Support",
+  "Ride & Payment Support",
 ];
 
 const steps = [
@@ -608,27 +608,22 @@ function Landing() {
             </div>
             <FooterCol
               title="Company"
-              items={["About RIDEHER", "Careers", "Community Guidelines", "Contact"]}
+              items={[{ label: "About RideHer", href: "/about-us" }, { label: "Contact us", href: "/contact-us" }, { label: "Services & pricing", href: "/pricing" }, { label: "Become a captain", href: "https://captain.rideher.in" }]}
             />
             <FooterCol
               title="Safety & Support"
-              items={["Safety Center", "Emergency Support", "FAQs", "24×7 Support"]}
+              items={[{ label: "Safety guidelines", href: "/safety-guidelines" }, { label: "Grievance redressal", href: "/grievance-redressal" }, { label: "Account & data deletion", href: "/account-deletion" }, { label: "Captain agreement", href: "/captain-agreement" }]}
             />
             <FooterCol
               title="Legal"
-              items={["Privacy Policy", "Terms & Conditions", "Become a Captain", "Social Media"]}
+              items={[{ label: "Privacy policy", href: "/privacy-policy" }, { label: "Terms & conditions", href: "/terms-and-conditions" }, { label: "Cancellation policy", href: "/cancellation-policy" }, { label: "Refund policy", href: "/refund-policy" }, { label: "Shipping & service delivery", href: "/shipping-and-delivery" }]}
             />
           </div>
           <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6">
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               © 2026 RIDEHER · Your Safe Travel Companion
             </p>
-            <div className="flex gap-4 text-xs text-muted-foreground">
-              <a href="#">Instagram</a>
-              <a href="#">LinkedIn</a>
-              <a href="#">YouTube</a>
-              <a href="#">X</a>
-            </div>
+            <a href="/policies" className="text-xs font-semibold text-primary">All policies & support</a>
           </div>
         </div>
       </footer>
@@ -637,7 +632,7 @@ function Landing() {
   );
 }
 
-function FooterCol({ title, items }: { title: string; items: string[] }) {
+function FooterCol({ title, items }: { title: string; items: { label: string; href: string }[] }) {
   return (
     <div>
       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -645,9 +640,9 @@ function FooterCol({ title, items }: { title: string; items: string[] }) {
       </p>
       <ul className="mt-4 space-y-2 text-sm">
         {items.map((i) => (
-          <li key={i}>
-            <a href="#" className="hover:text-primary">
-              {i}
+          <li key={i.href}>
+            <a href={i.href} className="hover:text-primary">
+              {i.label}
             </a>
           </li>
         ))}

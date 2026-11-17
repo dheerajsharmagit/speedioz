@@ -1,3 +1,5 @@
+import type { SavedRideRating } from "./api";
+
 export type RideStatus =
   | "destination"
   | "vehicle"
@@ -27,6 +29,9 @@ export interface Ride {
   paymentMethod?: string;
   paymentStatus?: string;
   fareBreakdown?: Record<string, number> | null;
+  rating?: SavedRideRating | null;
+  distanceMeters?: number;
+  durationSeconds?: number;
   use_smart_route?: boolean;
   captain_name?: string;
   captain_phone?: string;
