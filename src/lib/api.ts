@@ -538,7 +538,22 @@ export type BookingDetails = {
   fareBreakdown?: Record<string, number> | null;
 };
 
-// User methods
+export const uploadAvatar = async (file: File): Promise<{ user: AuthUser }> => {
+  const token = storage.getAccessToken();
+  if (!token) throw new Error("Not authenticated");
+  const fd = new FormData();
+  fd.append("file", file);
+  const response = await fetchWithRetry(`${API_URL}/users/me/avatar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: "Upload failed" }));
+    throw new RequestError(response.status, errorData);
+  }
+  return response.json();
+};
 export const userApi = {
   getMe: () => api<{ user: AuthUser }>("/users/me"),
   updateMe: (

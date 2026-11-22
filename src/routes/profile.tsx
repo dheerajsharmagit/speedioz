@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Calendar,
   Check,
@@ -13,10 +13,11 @@ import {
   Shield,
   User,
   X,
+  Camera,
 } from "lucide-react";
 import { RoleNav } from "@/components/rc/RoleNav";
 import { Button } from "@/components/ui/button";
-import { userApi, storage, type AuthUser } from "@/lib/api";
+import { userApi, storage, type AuthUser, uploadAvatar } from "@/lib/api";
 import { GoogleAccount } from "@/components/rc/GoogleAccount";
 
 export const Route = createFileRoute("/profile")({
@@ -53,6 +54,9 @@ function ProfilePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", avatarUrl: "" });
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setUser(storage.getUser());
@@ -91,6 +95,29 @@ function ProfilePage() {
     setEditing(true);
     setError(null);
     setNotice(null);
+  };
+
+  const handleAvatarPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Please choose an image smaller than 5 MB.");
+      return;
+    }
+    setSavingAvatar(true);
+    setError(null);
+    try {
+      const result = await uploadAvatar(file);
+      setUser(result.user);
+      storage.saveUser(result.user);
+      setNotice("Profile photo updated.");
+    } catch (e) {
+      setError(errorMessage(e, "We couldn't update your profile photo."));
+    } finally {
+      setSavingAvatar(false);
+      setAvatarPreview("");
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
 
   const save = async (event: FormEvent) => {
@@ -164,7 +191,7 @@ function ProfilePage() {
         </h1>
 
         <section className="mt-4 rounded-3xl bg-gradient-to-br from-primary/15 via-accent/10 to-card p-6 shadow-sm">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 relative">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-extrabold text-primary-foreground ring-4 ring-background">
               {user?.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
@@ -173,6 +200,22 @@ function ProfilePage() {
               ) : (
                 <User className="h-9 w-9" />
               )}
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={savingAvatar}
+                className="absolute bottom-0 right-0 grid size-8 place-items-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow-sm disabled:opacity-50"
+                aria-label="Change profile photo"
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={handleAvatarPick}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xl font-extrabold">{user?.name || "Welcome"}</p>
