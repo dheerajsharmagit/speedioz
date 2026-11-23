@@ -8,6 +8,10 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: "RIDEHER — Safe Rides. Her Way." },
       {
+        name: "google-site-verification",
+        content: "-M_rYBrV8oUnjkbupJyjJiH1hVwSPNDDLGmnobk6nmc",
+      },
+      {
         name: "description",
         content:
           "India's trusted women-only ride platform. Verified women captains, live safety monitoring, AI smart routes, and a community built exclusively for women.",
