@@ -12,9 +12,68 @@ interface Props {
 
 type Suggestion = { id: string; primary: string; secondary: string; lat: number; lng: number };
 
-// Place suggestions come from OpenStreetMap (Nominatim), which needs no key.
-// Browser Google Places is no longer authorised for this app's map key.
-async function searchPlaces(
+// --- Google Places Autocomplete (primary) ---
+async function googlePlacesSearch(
+  q: string,
+  bias?: { lat: number; lng: number } | null,
+): Promise<Suggestion[]> {
+  const apiKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY;
+  if (!apiKey || typeof window === "undefined" || !window.google?.maps?.places) return [];
+
+  return new Promise((resolve) => {
+    const sessionToken = new window.google.maps.places.AutocompleteSessionToken();
+    const request: Record<string, unknown> = {
+      input: q,
+      sessionToken,
+      fields: ["place_id", "description", "structured_formatting", "location"],
+    };
+    if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
+      request.location = new window.google.maps.LatLng(bias.lat, bias.lng);
+      request.radius = 40000; // 40 km
+      request.region = "in";
+    }
+    const service = new window.google.maps.places.AutocompleteService();
+    service.getPlacePredictions(request, (predictions, status) => {
+      if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
+        resolve([]);
+        return;
+      }
+      const results: Suggestion[] = predictions.map((p) => {
+        const main = p.structured_formatting?.main_text || p.description || "";
+        const secondary = p.structured_formatting?.secondary_text || "";
+        return {
+          id: p.place_id,
+          primary: main,
+          secondary,
+          lat: 0,
+          lng: 0,
+        };
+      });
+      // Resolve coordinates via Geocode
+      if (bias && results.length > 0 && typeof window !== "undefined" && window.google?.maps?.Geocoder) {
+        const geocoder = new window.google.maps.Geocoder();
+        const coordsPromises = results.slice(0, 8).map((r) => {
+          return new Promise<void>((res) => {
+            geocoder.geocode({ placeId: r.id }, (geoResults, geoStatus) => {
+              if (geoStatus === "OK" && geoResults?.[0]?.geometry?.location) {
+                const loc = geoResults[0].geometry.location;
+                r.lat = loc.lat();
+                r.lng = loc.lng();
+              }
+              res();
+            });
+          });
+        });
+        Promise.all(coordsPromises).then(() => resolve(results));
+      } else {
+        resolve(results);
+      }
+    });
+  });
+}
+
+// --- OpenStreetMap Nominatim fallback ---
+async function osmSearch(
   q: string,
   bias?: { lat: number; lng: number } | null,
 ): Promise<Suggestion[]> {
@@ -56,6 +115,23 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
   const [empty, setEmpty] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const reqIdRef = useRef(0);
+  const [gmReady, setGmReady] = useState(false);
+
+  // Wait for Google Maps to load
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const { loadGoogleMaps } = await import("@/lib/google-maps-loader");
+        await loadGoogleMaps();
+        if (!cancelled) setGmReady(true);
+      } catch {
+        // Google Maps not available — OSM fallback only
+      }
+    };
+    void check();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!value || value.trim().length < 2 || value === picked) {
@@ -67,7 +143,13 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       const myReq = ++reqIdRef.current;
       setLoading(true);
       try {
-        const list = await searchPlaces(value.trim(), bias);
+        let list: Suggestion[] = [];
+        if (gmReady) {
+          list = await googlePlacesSearch(value.trim(), bias);
+        }
+        if (list.length === 0) {
+          list = await osmSearch(value.trim(), bias);
+        }
         if (myReq !== reqIdRef.current) return;
         setSuggestions(list);
         setEmpty(list.length === 0);
@@ -82,7 +164,7 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [value, picked, bias?.lat, bias?.lng]);
+  }, [value, picked, bias?.lat, bias?.lng, gmReady]);
 
   function handlePick(s: Suggestion) {
     const addr = [s.primary, s.secondary].filter(Boolean).join(", ");
