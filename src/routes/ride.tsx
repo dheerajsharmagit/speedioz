@@ -45,6 +45,7 @@ import {
 } from "@/lib/api";
 import { computeRoute } from "@/lib/routes.functions";
 import { getDeviceId } from "@/lib/device-id";
+import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { decodePolyline, pointAt } from "@/lib/polyline";
 import { generateOtp, type Ride, type RideStatus } from "@/lib/rides";
 import { io, Socket } from "socket.io-client";
@@ -182,7 +183,24 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
     const address = formattedAddress?.trim();
     if (address && pickupPrecision === true) return address;
   } catch {
-    // Use Nominatim if the backend lookup fails.
+    // Try the browser geocoder when the server geocoder is unavailable.
+  }
+
+  try {
+    if (typeof google !== "undefined" && google.maps?.importLibrary) {
+      await loadGoogleMaps();
+      const { Geocoder } = await google.maps.importLibrary("geocoding");
+      const { results } = await new Geocoder().geocode({ location: { lat, lng } });
+      const pickupTypes = new Set([
+        "street_address", "premise", "subpremise", "route", "intersection", "point_of_interest", "establishment",
+      ]);
+      const detailed = results.find((result) =>
+        result.formatted_address && result.types.some((type) => pickupTypes.has(type)),
+      );
+      if (detailed) return detailed.formatted_address;
+    }
+  } catch {
+    // Continue to the existing fallback when browser geocoding is unavailable.
   }
 
   try {
