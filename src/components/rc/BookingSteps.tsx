@@ -189,7 +189,7 @@ export function DestinationStep({
       )}
       <button
         type="button"
-        disabled={!dest || !pickupConfirmed}
+        disabled={!dest || !pickupConfirmed || locating}
         onClick={onNext}
         className={buttonClass}
       >

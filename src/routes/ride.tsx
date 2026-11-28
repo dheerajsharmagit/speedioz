@@ -33,6 +33,7 @@ import { RideCompletion } from "@/components/rc/RideCompletion";
 import {
   RequestError,
   API_BASE_URL,
+  api,
   captainMapApi,
   rideApi,
   storage,
@@ -168,26 +169,27 @@ function formatDuration(sec: number): string {
   return m ? `${h}h ${m} min` : `${h}h`;
 }
 
-// Reverse-geocode a lat/lng to a human address using OpenStreetMap Nominatim.
-// Free, no key required. Falls back silently on failure.
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  const coordinates = new URLSearchParams({ latitude: String(lat), longitude: String(lng) });
+  try {
+    const { formattedAddress } = await api<{ formattedAddress?: string }>(
+      `/locations/reverse-geocode?${coordinates}`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    const address = formattedAddress?.trim();
+    if (address && address !== `${lat}, ${lng}`) return address;
+  } catch {
+    // Use Nominatim if the backend lookup fails.
+  }
+
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`,
-      { headers: { Accept: "application/json" } },
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18`,
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) },
     );
     if (!res.ok) return null;
-    const j = (await res.json()) as { display_name?: string; address?: Record<string, string> };
-    if (j.address) {
-      const a = j.address;
-      const parts = [
-        a.road || a.pedestrian || a.neighbourhood || a.suburb,
-        a.suburb && a.road ? a.suburb : null,
-        a.city || a.town || a.village,
-      ].filter(Boolean);
-      if (parts.length) return parts.join(", ");
-    }
-    return j.display_name ?? null;
+    const result = (await res.json()) as { display_name?: string };
+    return result.display_name?.trim() || null;
   } catch {
     return null;
   }
@@ -439,6 +441,7 @@ function RidePage() {
   const deviceIdRef = useRef<string>("");
   const userIdRef = useRef<string>("");
   const firstFixRef = useRef(false);
+  const pickupLookupRef = useRef(0);
 
   const [routeInfo, setRouteInfo] = useState<{
     distanceMeters: number;
@@ -499,7 +502,23 @@ function RidePage() {
   const trackingCaptain = !!ride && isCaptainTracking(step);
   const mapCaptain = trackingCaptain && isMapPosition(captainPos) ? captainPos : null;
 
-  function requestGeolocation() {
+  async function resolveCurrentPickup(position: { lat: number; lng: number }) {
+    if (recoveredRideRef.current) return;
+    firstFixRef.current = true;
+    const lookup = ++pickupLookupRef.current;
+    setLocating(false);
+    setPickupConfirmed(false);
+    setPickupQuery("");
+    setPickup({ label: "Finding your pickup address?", ...position });
+
+    const address = await reverseGeocode(position.lat, position.lng);
+    if (lookup !== pickupLookupRef.current || recoveredRideRef.current) return;
+    setPickup({ label: address ?? "Pickup address unavailable. Select Change to enter it.", ...position });
+    setPickupConfirmed(Boolean(address));
+  }
+
+  function requestGeolocation(initial = false) {
+    const lookup = pickupLookupRef.current;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoError("unavailable");
       setLocating(false);
@@ -511,19 +530,13 @@ function RidePage() {
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(p);
-        if (recoveredRideRef.current) return;
-        setPickup({ label: "Current location", ...p });
-        setPickupConfirmed(true);
-        firstFixRef.current = true;
+        if (lookup !== pickupLookupRef.current || (initial && firstFixRef.current)) return;
+        setGeoError(null);
         setLocating(false);
-        reverseGeocode(p.lat, p.lng).then((addr) => {
-          if (addr)
-            setPickup((prev) =>
-              prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev,
-            );
-        });
+        void resolveCurrentPickup(p);
       },
       (err) => {
+        if (lookup !== pickupLookupRef.current || (initial && firstFixRef.current)) return;
         const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
         setGeoError(code);
         setLocating(false);
@@ -551,27 +564,17 @@ function RidePage() {
       return;
     }
 
-    requestGeolocation();
+    requestGeolocation(true);
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(p);
         setGeoError(null);
-        if (!firstFixRef.current) {
-          setPickup({ label: "Current location", ...p });
-          setPickupConfirmed(true);
-          firstFixRef.current = true;
-          setLocating(false);
-          reverseGeocode(p.lat, p.lng).then((addr) => {
-            if (addr)
-              setPickup((prev) =>
-                prev.lat === p.lat && prev.lng === p.lng ? { ...prev, label: addr } : prev,
-              );
-          });
-        }
+        if (!firstFixRef.current) void resolveCurrentPickup(p);
       },
       (err) => {
+        if (firstFixRef.current) return;
         const code = err.code === 1 ? "denied" : err.code === 2 ? "unavailable" : "timeout";
         setGeoError(code);
         setLocating(false);
@@ -1242,7 +1245,7 @@ function RidePage() {
                     : "Location unavailable"}
               </span>
               <button
-                onClick={requestGeolocation}
+                onClick={() => requestGeolocation()}
                 className="ml-auto shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-secondary"
               >
                 Retry
@@ -1313,41 +1316,23 @@ function RidePage() {
             <DestinationStep
               pickup={pickup}
               setPickup={(p) => {
+                firstFixRef.current = true;
+                pickupLookupRef.current++;
+                setLocating(false);
                 setPickup(p);
                 setPickupQuery(p.label);
                 setPickupConfirmed(true);
               }}
               pickupQuery={pickupQuery}
               setPickupQuery={setPickupQuery}
-              onUseCurrentLocation={() => {
-                if (typeof navigator === "undefined" || !navigator.geolocation) return;
-                setLocating(true);
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    setPickup({ label: "Current location", lat, lng });
-                    setPickupQuery("");
-                    setPickupConfirmed(true);
-                    setLocating(false);
-                    reverseGeocode(lat, lng).then((addr) => {
-                      if (addr)
-                        setPickup((prev) =>
-                          prev.lat === lat && prev.lng === lng ? { ...prev, label: addr } : prev,
-                        );
-                    });
-                  },
-                  () => setLocating(false),
-                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-                );
-              }}
+              onUseCurrentLocation={() => requestGeolocation()}
               locating={locating}
               pickupConfirmed={pickupConfirmed}
               dest={dest}
               setDest={setDest}
               query={destQuery}
               setQuery={setDestQuery}
-              onNext={() => dest && setStep("vehicle")}
+              onNext={() => dest && pickupConfirmed && !locating && setStep("vehicle")}
               routeInfo={routeInfo}
             />
           )}
