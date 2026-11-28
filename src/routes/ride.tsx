@@ -172,12 +172,15 @@ function formatDuration(sec: number): string {
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   const coordinates = new URLSearchParams({ latitude: String(lat), longitude: String(lng) });
   try {
-    const { formattedAddress } = await api<{ formattedAddress?: string }>(
+    const { formattedAddress, pickupPrecision } = await api<{
+      formattedAddress?: string;
+      pickupPrecision?: boolean;
+    }>(
       `/locations/reverse-geocode?${coordinates}`,
       { signal: AbortSignal.timeout(5000) },
     );
     const address = formattedAddress?.trim();
-    if (address && address !== `${lat}, ${lng}`) return address;
+    if (address && pickupPrecision === true) return address;
   } catch {
     // Use Nominatim if the backend lookup fails.
   }
@@ -188,7 +191,8 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
       { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) },
     );
     if (!res.ok) return null;
-    const result = (await res.json()) as { display_name?: string };
+    const result = (await res.json()) as { display_name?: string; place_rank?: number };
+    if ((result.place_rank ?? 0) < 26) return null;
     return result.display_name?.trim() || null;
   } catch {
     return null;
@@ -502,8 +506,15 @@ function RidePage() {
   const trackingCaptain = !!ride && isCaptainTracking(step);
   const mapCaptain = trackingCaptain && isMapPosition(captainPos) ? captainPos : null;
 
-  async function resolveCurrentPickup(position: { lat: number; lng: number }) {
+  async function resolveCurrentPickup(position: { lat: number; lng: number }, accuracy: number) {
     if (recoveredRideRef.current) return;
+    if (!Number.isFinite(accuracy) || accuracy > 150) {
+      setLocating(false);
+      if (!firstFixRef.current) {
+        setPickup({ label: "Your location is approximate. Select Change to search for your building or street.", ...position });
+      }
+      return;
+    }
     firstFixRef.current = true;
     const lookup = ++pickupLookupRef.current;
     setLocating(false);
@@ -513,7 +524,7 @@ function RidePage() {
 
     const address = await reverseGeocode(position.lat, position.lng);
     if (lookup !== pickupLookupRef.current || recoveredRideRef.current) return;
-    setPickup({ label: address ?? "Pickup address unavailable. Select Change to enter it.", ...position });
+    setPickup({ label: address ?? "Select Change to search for your building, street or landmark.", ...position });
     setPickupConfirmed(Boolean(address));
   }
 
@@ -533,7 +544,7 @@ function RidePage() {
         if (lookup !== pickupLookupRef.current || (initial && firstFixRef.current)) return;
         setGeoError(null);
         setLocating(false);
-        void resolveCurrentPickup(p);
+        void resolveCurrentPickup(p, pos.coords.accuracy);
       },
       (err) => {
         if (lookup !== pickupLookupRef.current || (initial && firstFixRef.current)) return;
@@ -541,7 +552,7 @@ function RidePage() {
         setGeoError(code);
         setLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   }
 
@@ -571,7 +582,7 @@ function RidePage() {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(p);
         setGeoError(null);
-        if (!firstFixRef.current) void resolveCurrentPickup(p);
+        if (!firstFixRef.current) void resolveCurrentPickup(p, pos.coords.accuracy);
       },
       (err) => {
         if (firstFixRef.current) return;
