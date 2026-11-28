@@ -4,6 +4,7 @@ import {
   type GooglePolyline,
   type GoogleLatLng,
   loadGoogleMaps,
+  onGoogleMapsAuthFailure,
 } from "@/lib/google-maps-loader";
 import { useTheme } from "@/lib/theme";
 
@@ -24,6 +25,7 @@ export function RoutePreviewMap({ from, to, className, encodedPolyline }: Props)
     let cancelled = false;
     let map: GoogleMap | null = null;
     let poly: GooglePolyline | null = null;
+    const offAuth = onGoogleMapsAuthFailure(() => setError(true));
 
     (async () => {
       try {
@@ -93,12 +95,13 @@ export function RoutePreviewMap({ from, to, className, encodedPolyline }: Props)
         }
       } catch (e) {
         console.error(e);
-        setError(true);
+        if (!cancelled) setError(true);
       }
     })();
 
     return () => {
       cancelled = true;
+      offAuth();
       poly?.setMap(null);
       map = null;
     };

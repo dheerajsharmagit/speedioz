@@ -4,7 +4,6 @@ import {
   type GoogleMarker,
   type GooglePolyline,
   loadGoogleMaps,
-  resetGoogleMapsLoader,
   onGoogleMapsAuthFailure,
 } from "@/lib/google-maps-loader";
 
@@ -171,7 +170,7 @@ export function RideMap({
     })();
     const offAuth = onGoogleMapsAuthFailure(() => {
       if (cancelled) return;
-      setLoadError("Google Maps authentication failed for this domain");
+      setLoadError("Google Maps authentication failed");
     });
 
     return () => {
@@ -488,7 +487,6 @@ export function RideMap({
         />
         <button
           onClick={() => {
-            resetGoogleMapsLoader();
             setLoadError(null);
             setMapReady(false);
             setRetryTick((n) => n + 1);

@@ -17,24 +17,23 @@ async function googlePlacesSearch(
   q: string,
   bias?: { lat: number; lng: number } | null,
 ): Promise<Suggestion[]> {
-  const apiKey = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY;
-  if (!apiKey || typeof window === "undefined" || !window.google?.maps?.places) return [];
+  if (typeof google === "undefined" || !google.maps?.places) return [];
+  const maps = google.maps;
 
   return new Promise((resolve) => {
-    const sessionToken = new window.google.maps.places.AutocompleteSessionToken();
-    const request: Record<string, unknown> = {
+    const sessionToken = new maps.places.AutocompleteSessionToken();
+    const request: google.maps.places.AutocompletionRequest = {
       input: q,
       sessionToken,
-      fields: ["place_id", "description", "structured_formatting", "location"],
     };
     if (bias && Number.isFinite(bias.lat) && Number.isFinite(bias.lng)) {
-      request.location = new window.google.maps.LatLng(bias.lat, bias.lng);
+      request.location = new maps.LatLng(bias.lat, bias.lng);
       request.radius = 40000; // 40 km
       request.region = "in";
     }
-    const service = new window.google.maps.places.AutocompleteService();
+    const service = new maps.places.AutocompleteService();
     service.getPlacePredictions(request, (predictions, status) => {
-      if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
+      if (status !== maps.places.PlacesServiceStatus.OK || !predictions) {
         resolve([]);
         return;
       }
@@ -50,8 +49,8 @@ async function googlePlacesSearch(
         };
       });
       // Resolve coordinates via Geocode
-      if (bias && results.length > 0 && typeof window !== "undefined" && window.google?.maps?.Geocoder) {
-        const geocoder = new window.google.maps.Geocoder();
+      if (results.length > 0 && maps.Geocoder) {
+        const geocoder = new maps.Geocoder();
         const coordsPromises = results.slice(0, 8).map((r) => {
           return new Promise<void>((res) => {
             geocoder.geocode({ placeId: r.id }, (geoResults, geoStatus) => {
@@ -64,9 +63,11 @@ async function googlePlacesSearch(
             });
           });
         });
-        Promise.all(coordsPromises).then(() => resolve(results));
+        Promise.all(coordsPromises).then(() => {
+          resolve(results.filter((result) => result.lat !== 0 || result.lng !== 0));
+        });
       } else {
-        resolve(results);
+        resolve([]);
       }
     });
   });
@@ -120,17 +121,24 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
   // Wait for Google Maps to load
   useEffect(() => {
     let cancelled = false;
+    let offAuth: (() => void) | undefined;
     const check = async () => {
       try {
-        const { loadGoogleMaps } = await import("@/lib/google-maps-loader");
+        const { loadGoogleMaps, onGoogleMapsAuthFailure } = await import("@/lib/google-maps-loader");
         await loadGoogleMaps();
-        if (!cancelled) setGmReady(true);
+        if (!cancelled) {
+          setGmReady(true);
+          offAuth = onGoogleMapsAuthFailure(() => setGmReady(false));
+        }
       } catch {
         // Google Maps not available — OSM fallback only
       }
     };
     void check();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      offAuth?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -145,7 +153,7 @@ export function PlaceSearch({ value, onChange, onSelect, placeholder, bias }: Pr
       try {
         let list: Suggestion[] = [];
         if (gmReady) {
-          list = await googlePlacesSearch(value.trim(), bias);
+          list = await googlePlacesSearch(value.trim(), bias).catch(() => []);
         }
         if (list.length === 0) {
           list = await osmSearch(value.trim(), bias);
